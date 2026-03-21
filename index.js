@@ -736,8 +736,8 @@ const reportData = {
   logoUrl: "https://via.placeholder.com/120x40?text=EW",
   reportDate: new Date().toLocaleString(),
   callerName: "Unknown Caller",
-  callerPhone: "Unknown",
-  callDuration: "N/A",
+callerPhone: request.body.From || "Unknown",
+callDuration: request.body.CallDuration || "N/A",
 
   category: "General Inquiry",
   resolutionStatus: "Follow-Up Needed",
