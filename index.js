@@ -598,10 +598,13 @@ Medium`;
 
 const start = async () => {
   try {
-    await fastify.listen({
-      port: process.env.PORT || 5050,
-      host: '0.0.0.0'
-    });
+await fastify.listen({
+  port: process.env.PORT || 5050,
+  host: '0.0.0.0',
+  listenTextResolver: (address) => {
+    console.log(`Server listening at ${address}`);
+  }
+});
     console.log(`Server listening on ${process.env.PORT || 5050}`);
   } catch (err) {
     fastify.log.error(err);
