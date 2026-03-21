@@ -596,10 +596,10 @@ Medium`;
     });
 });
 
-fastify.listen({ port: PORT }, (err) => {
-    if (err) {
-        console.error(err);
-        process.exit(1);
-    }
-    console.log(`Server is listening on port ${PORT}`);
+fastify.listen({ port: PORT, host: '0.0.0.0' }, (err, address) => {
+  if (err) {
+    console.error(err);
+    process.exit(1);
+  }
+  console.log(`Server listening at ${address}`);
 });
