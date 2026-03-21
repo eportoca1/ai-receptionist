@@ -296,7 +296,7 @@ const LOG_EVENT_TYPES = [
 
 // Show AI response elapsed timing calculations
 const SHOW_TIMING_MATH = false;
-async function sendSummaryEmail(subject, body) {
+async function sendSummaryEmail(subject, body, htmlBody = null) {
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT || 465),
@@ -307,12 +307,13 @@ async function sendSummaryEmail(subject, body) {
     },
   });
 
-  await transporter.sendMail({
-    from: `EW AI Receptionist <${process.env.SMTP_USER}>`,
-    to: process.env.SUMMARY_EMAIL_TO,
-    subject,
-    text: body,
-  });
+await transporter.sendMail({
+  from: `EW AI Receptionist <${process.env.SMTP_USER}>`,
+  to: process.env.SUMMARY_EMAIL_TO,
+  subject,
+  text: body,
+  html: htmlBody || `<pre style="font-family: Arial, sans-serif; white-space: pre-wrap;">${body}</pre>`,
+});
 }
 // Root Route
 fastify.get('/', async (request, reply) => {
