@@ -296,6 +296,162 @@ const LOG_EVENT_TYPES = [
 
 // Show AI response elapsed timing calculations
 const SHOW_TIMING_MATH = false;
+
+function buildCallReportHtml(data) {
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Call Intelligence Report - Electronic World</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f9fafb; font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #111827;">
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f9fafb; padding: 30px 15px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 640px; background-color: #ffffff; border-radius: 12px; border: 1px solid #e5e7eb; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03); overflow: hidden;">
+          <tr>
+            <td style="padding: 35px 35px 25px 35px; text-align: center; border-bottom: 1px solid #f3f4f6;">
+              <div style="margin-bottom: 16px;">
+                <img src="${data.logoUrl || ''}" alt="Electronic World" style="display: block; margin: 0 auto; max-height: 36px; height: auto; border: 0;" />
+              </div>
+              <h1 style="margin: 0 0 10px 0; font-size: 20px; font-weight: 700; color: #000000; letter-spacing: -0.5px;">Call Intelligence Report</h1>
+              <p style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 500;">
+                ${data.reportDate || 'N/A'} &nbsp;•&nbsp; ${data.callerName || 'Unknown Caller'} &nbsp;•&nbsp; ${data.callerPhone || 'Unknown Number'} &nbsp;•&nbsp; Duration: ${data.callDuration || 'N/A'}
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding: 35px;">
+              <div style="background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-bottom: 28px; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+                <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td width="50%" valign="top" style="padding-bottom: 16px; border-right: 1px solid #f3f4f6; padding-right: 12px;">
+                      <p style="margin: 0 0 6px 0; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #9ca3af; font-weight: 700;">Primary Category</p>
+                      <span style="display: inline-block; background-color: #f3f4f6; color: #374151; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;">${data.category || 'General Inquiry'}</span>
+                    </td>
+                    <td width="50%" valign="top" style="padding-bottom: 16px; padding-left: 16px;">
+                      <p style="margin: 0 0 6px 0; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #9ca3af; font-weight: 700;">Resolution Status</p>
+                      <span style="display: inline-block; background-color: rgba(113, 171, 80, 0.15); color: #528238; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;">${data.resolutionStatus || 'Follow-Up Needed'}</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td width="50%" valign="top" style="border-right: 1px solid #f3f4f6; padding-right: 12px;">
+                      <p style="margin: 0 0 6px 0; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #9ca3af; font-weight: 700;">Urgency</p>
+                      <span style="display: inline-block; font-size: 13px; font-weight: 600; color: #111827;">${data.urgency || 'Medium'}</span>
+                    </td>
+                    <td width="50%" valign="top" style="padding-left: 16px;">
+                      <p style="margin: 0 0 6px 0; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #9ca3af; font-weight: 700;">Sentiment</p>
+                      <span style="display: inline-block; font-size: 13px; font-weight: 600; color: #111827;">${data.sentiment || 'Neutral'}</span>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+
+              <div style="margin-bottom: 28px;">
+                <h2 style="margin: 0 0 10px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #9ca3af; font-weight: 700;">Executive Summary</h2>
+                <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #374151;">${data.executiveSummary || ''}</p>
+              </div>
+
+              <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 28px; background-color: #fafafa;">
+                <h2 style="margin: 0 0 16px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #9ca3af; font-weight: 700;">Key Business Details</h2>
+                <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td width="50%" valign="top" style="padding-bottom: 16px;">
+                      <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280;">Product</p>
+                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${data.product || 'N/A'}</p>
+                    </td>
+                    <td width="50%" valign="top" style="padding-bottom: 16px;">
+                      <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280;">Issue / Sub-Type</p>
+                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${data.issue || 'N/A'} (${data.subType || 'N/A'})</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td width="50%" valign="top" style="padding-bottom: 16px;">
+                      <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280;">Customer Type</p>
+                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${data.customerType || 'Unknown'}</p>
+                    </td>
+                    <td width="50%" valign="top" style="padding-bottom: 16px;">
+                      <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280;">Purchase Status</p>
+                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${data.purchaseStatus || 'Unknown'}</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colspan="2" valign="top">
+                      <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280;">Call Context</p>
+                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${data.callContext || 'N/A'}</p>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+
+              <div style="margin-bottom: 28px;">
+                <h2 style="margin: 0 0 12px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #9ca3af; font-weight: 700;">Conversation Highlights</h2>
+                <ul style="margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.6; color: #374151;">
+                  ${data.conversationHighlightsHtml || ''}
+                </ul>
+              </div>
+
+              <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 28px;">
+                <h2 style="margin: 0 0 16px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #9ca3af; font-weight: 700;">Intelligence Assessment</h2>
+                <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td width="50%" valign="top" style="padding-bottom: 16px;">
+                      <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280;">Root Cause</p>
+                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${data.rootCause || 'Unknown'}</p>
+                    </td>
+                    <td width="50%" valign="top" style="padding-bottom: 16px;">
+                      <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280;">Commercial Value</p>
+                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${data.commercialValue || 'Low'}</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td width="50%" valign="top">
+                      <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280;">Upsell Opportunity</p>
+                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #71ab50;">${data.upsellOpportunity || 'Low'}</p>
+                    </td>
+                    <td width="50%" valign="top">
+                      <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280;">Escalation Status</p>
+                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${data.escalationStatus || 'No Escalation Needed'}</p>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+
+              <div style="background-color: #fcfcfc; border: 1px solid #e5e7eb; border-left: 4px solid #71ab50; border-radius: 6px; padding: 20px; margin-bottom: 28px; box-shadow: 0 2px 4px rgba(0,0,0,0.01);">
+                <h2 style="margin: 0 0 12px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #9ca3af; font-weight: 700;">Recommended Actions</h2>
+                <ul style="margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.6; color: #111827;">
+                  ${data.recommendedActionsHtml || ''}
+                </ul>
+              </div>
+
+              <div>
+                <h2 style="margin: 0 0 10px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #9ca3af; font-weight: 700;">Transcript Excerpt</h2>
+                <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; background-color: #f9fafb;">
+                  <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #4b5563; font-family: 'Courier New', Courier, monospace; white-space: pre-wrap;">${data.transcriptExcerpt || ''}</p>
+                </div>
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding: 24px 35px; text-align: center; background-color: #f9fafb; border-top: 1px solid #e5e7eb;">
+              <p style="margin: 0; font-size: 12px; color: #9ca3af;">Generated automatically by Electronic World Intelligence Systems.</p>
+              <p style="margin: 4px 0 0 0; font-size: 12px; font-weight: 600; color: #9ca3af;">Dream Higher.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+
+
 async function sendSummaryEmail(subject, body, htmlBody = null) {
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
@@ -576,8 +732,39 @@ NEXT STEPS:
 
 URGENCY:
 Medium`;
+const reportData = {
+  logoUrl: "https://via.placeholder.com/120x40?text=EW",
+  reportDate: new Date().toLocaleString(),
+  callerName: "Unknown Caller",
+  callerPhone: "Unknown",
+  callDuration: "N/A",
 
-        await sendSummaryEmail(subject, body);
+  category: "General Inquiry",
+  resolutionStatus: "Follow-Up Needed",
+  urgency: "Medium",
+  sentiment: "Neutral",
+
+  executiveSummary: body,
+
+  product: "N/A",
+  issue: "N/A",
+  subType: "N/A",
+  customerType: "Unknown",
+  purchaseStatus: "Unknown",
+  callContext: "General Call",
+
+  rootCause: "Unknown",
+  commercialValue: "Low",
+  upsellOpportunity: "Low",
+  escalationStatus: "No Escalation Needed",
+
+  conversationHighlightsHtml: `<li>No structured highlights yet</li>`,
+  recommendedActionsHtml: `<li>Review call manually</li>`,
+  transcriptExcerpt: body
+};
+
+const htmlBody = buildCallReportHtml(reportData);
+await sendSummaryEmail(subject, body, htmlBody);
         console.log('✅ Summary email sent.');
     } catch (err) {
         console.error('❌ Summary email failed:', err);
