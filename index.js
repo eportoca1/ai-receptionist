@@ -785,7 +785,7 @@ callDuration: "N/A",
 
   conversationHighlightsHtml: `<li>No structured highlights yet</li>`,
   recommendedActionsHtml: `<li>Review call manually</li>`,
-  transcriptExcerpt: body
+transcriptExcerpt: transcript || "No transcript available"
 };
 
 const htmlBody = buildCallReportHtml(reportData);
