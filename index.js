@@ -732,6 +732,31 @@ NEXT STEPS:
 
 URGENCY:
 Medium`;
+// Generate AI executive summary
+const aiSummaryResponse = await fetch("https://api.openai.com/v1/responses", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${OPENAI_API_KEY}`,
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    model: "gpt-4o-mini",
+    input: [
+  {
+    role: "system",
+    content: "You are an AI call analyst. Summarize customer service calls into clean, professional executive summaries."
+  },
+  {
+    role: "user",
+    content: `Summarize this call clearly and professionally:\n\n${body}`
+  }
+],
+    temperature: 0.4
+  })
+});
+
+const aiSummaryData = await aiSummaryResponse.json();
+const cleanSummary = aiSummaryData.output?.[0]?.content?.[0]?.text || body;
 const reportData = {
   logoUrl: "https://via.placeholder.com/120x40?text=EW",
   reportDate: new Date().toLocaleString(),
@@ -744,7 +769,7 @@ callDuration: "N/A",
   urgency: "Medium",
   sentiment: "Neutral",
 
-  executiveSummary: body,
+  executiveSummary: cleanSummary,
 
   product: "N/A",
   issue: "N/A",
