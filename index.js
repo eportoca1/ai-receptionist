@@ -303,6 +303,77 @@ const LOG_EVENT_TYPES = [
 // Show AI response elapsed timing calculations
 const SHOW_TIMING_MATH = false;
 
+function escapeHtml(value = '') {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatDurationFromSeconds(totalSeconds) {
+  if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return 'N/A';
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = Math.round(totalSeconds % 60);
+  if (minutes <= 0) return `${seconds}s`;
+  return `${minutes}m ${seconds}s`;
+}
+
+function normalizeList(value, fallback = []) {
+  if (!Array.isArray(value)) return fallback;
+  return value
+    .map((item) => String(item || '').trim())
+    .filter(Boolean);
+}
+
+function safeJsonParse(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function buildListHtml(items, emptyText) {
+  const cleanItems = normalizeList(items);
+  if (cleanItems.length === 0) {
+    return `<li>${escapeHtml(emptyText)}</li>`;
+  }
+  return cleanItems.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
+}
+
+function buildTranscriptHtml(transcriptLines) {
+  const cleanLines = normalizeList(transcriptLines);
+  if (cleanLines.length === 0) {
+    return `<p style="margin: 0; font-size: 13px; line-height: 1.7; color: #4b5563;">No transcript available.</p>`;
+  }
+
+  return cleanLines
+    .map((line) => {
+      const isCaller = line.startsWith('Caller:');
+      const isAi = line.startsWith('AI:');
+      let speaker = 'Line';
+      let text = line;
+
+      if (isCaller) {
+        speaker = 'Caller';
+        text = line.replace(/^Caller:\s*/, '');
+      } else if (isAi) {
+        speaker = 'Genesis';
+        text = line.replace(/^AI:\s*/, '');
+      }
+
+      return `
+        <div style="margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #f3f4f6;">
+          <div style="font-size: 12px; font-weight: 700; color: ${isCaller ? '#111827' : '#528238'}; margin-bottom: 4px;">${escapeHtml(speaker)}</div>
+          <div style="font-size: 14px; line-height: 1.7; color: #374151;">${escapeHtml(text)}</div>
+        </div>
+      `;
+    })
+    .join('');
+}
+
 function buildCallReportHtml(data) {
   return `
 <!DOCTYPE html>
@@ -316,15 +387,15 @@ function buildCallReportHtml(data) {
   <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f9fafb; padding: 30px 15px;">
     <tr>
       <td align="center">
-        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 640px; background-color: #ffffff; border-radius: 12px; border: 1px solid #e5e7eb; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03); overflow: hidden;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 760px; background-color: #ffffff; border-radius: 12px; border: 1px solid #e5e7eb; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03); overflow: hidden;">
           <tr>
             <td style="padding: 35px 35px 25px 35px; text-align: center; border-bottom: 1px solid #f3f4f6;">
               <div style="margin-bottom: 16px;">
-                <img src="${data.logoUrl || ''}" alt="Electronic World" style="display: block; margin: 0 auto; max-height: 36px; height: auto; border: 0;" />
+                <img src="${escapeHtml(data.logoUrl || '')}" alt="Electronic World" style="display: block; margin: 0 auto; max-height: 36px; height: auto; border: 0;" />
               </div>
               <h1 style="margin: 0 0 10px 0; font-size: 20px; font-weight: 700; color: #000000; letter-spacing: -0.5px;">Call Intelligence Report</h1>
               <p style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 500;">
-                ${data.reportDate || 'N/A'} &nbsp;•&nbsp; ${data.callerName || 'Unknown Caller'} &nbsp;•&nbsp; ${data.callerPhone || 'Unknown Number'} &nbsp;•&nbsp; Duration: ${data.callDuration || 'N/A'}
+                ${escapeHtml(data.reportDate || 'N/A')} &nbsp;•&nbsp; ${escapeHtml(data.callerName || 'Unknown Caller')} &nbsp;•&nbsp; ${escapeHtml(data.callerPhone || 'Unknown Number')} &nbsp;•&nbsp; Duration: ${escapeHtml(data.callDuration || 'N/A')}
               </p>
             </td>
           </tr>
@@ -334,23 +405,21 @@ function buildCallReportHtml(data) {
               <div style="background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-bottom: 28px; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
                 <table width="100%" cellpadding="0" cellspacing="0" border="0">
                   <tr>
-                    <td width="50%" valign="top" style="padding-bottom: 16px; border-right: 1px solid #f3f4f6; padding-right: 12px;">
+                    <td width="25%" valign="top" style="padding-right: 12px;">
                       <p style="margin: 0 0 6px 0; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #9ca3af; font-weight: 700;">Primary Category</p>
-                      <span style="display: inline-block; background-color: #f3f4f6; color: #374151; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;">${data.category || 'General Inquiry'}</span>
+                      <span style="display: inline-block; background-color: #f3f4f6; color: #374151; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;">${escapeHtml(data.category || 'General Inquiry')}</span>
                     </td>
-                    <td width="50%" valign="top" style="padding-bottom: 16px; padding-left: 16px;">
-                      <p style="margin: 0 0 6px 0; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #9ca3af; font-weight: 700;">Resolution Status</p>
-                      <span style="display: inline-block; background-color: rgba(113, 171, 80, 0.15); color: #528238; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;">${data.resolutionStatus || 'Follow-Up Needed'}</span>
+                    <td width="25%" valign="top" style="padding-right: 12px;">
+                      <p style="margin: 0 0 6px 0; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #9ca3af; font-weight: 700;">Resolution</p>
+                      <span style="display: inline-block; background-color: rgba(113, 171, 80, 0.15); color: #528238; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;">${escapeHtml(data.resolutionStatus || 'Unknown')}</span>
                     </td>
-                  </tr>
-                  <tr>
-                    <td width="50%" valign="top" style="border-right: 1px solid #f3f4f6; padding-right: 12px;">
+                    <td width="25%" valign="top" style="padding-right: 12px;">
                       <p style="margin: 0 0 6px 0; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #9ca3af; font-weight: 700;">Urgency</p>
-                      <span style="display: inline-block; font-size: 13px; font-weight: 600; color: #111827;">${data.urgency || 'Medium'}</span>
+                      <span style="display: inline-block; font-size: 13px; font-weight: 600; color: #111827;">${escapeHtml(data.urgency || 'Medium')}</span>
                     </td>
-                    <td width="50%" valign="top" style="padding-left: 16px;">
+                    <td width="25%" valign="top">
                       <p style="margin: 0 0 6px 0; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #9ca3af; font-weight: 700;">Sentiment</p>
-                      <span style="display: inline-block; font-size: 13px; font-weight: 600; color: #111827;">${data.sentiment || 'Neutral'}</span>
+                      <span style="display: inline-block; font-size: 13px; font-weight: 600; color: #111827;">${escapeHtml(data.sentiment || 'Neutral')}</span>
                     </td>
                   </tr>
                 </table>
@@ -358,7 +427,33 @@ function buildCallReportHtml(data) {
 
               <div style="margin-bottom: 28px;">
                 <h2 style="margin: 0 0 10px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #9ca3af; font-weight: 700;">Executive Summary</h2>
-                <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #374151;">${data.executiveSummary || ''}</p>
+                <p style="margin: 0; font-size: 14px; line-height: 1.7; color: #374151;">${escapeHtml(data.executiveSummary || 'No summary available.')}</p>
+              </div>
+
+              <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 28px; background-color: #fafafa;">
+                <h2 style="margin: 0 0 16px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #9ca3af; font-weight: 700;">Call Outcome</h2>
+                <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td width="33%" valign="top" style="padding-bottom: 16px;">
+                      <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280;">Follow-Up Needed</p>
+                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${escapeHtml(data.followUpNeeded || 'Unknown')}</p>
+                    </td>
+                    <td width="33%" valign="top" style="padding-bottom: 16px;">
+                      <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280;">Escalation Needed</p>
+                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${escapeHtml(data.escalationNeeded || 'Unknown')}</p>
+                    </td>
+                    <td width="33%" valign="top" style="padding-bottom: 16px;">
+                      <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280;">Lead Opportunity</p>
+                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${escapeHtml(data.leadOpportunity || 'None')}</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colspan="3" valign="top">
+                      <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280;">Outcome Notes</p>
+                      <p style="margin: 0; font-size: 13px; line-height: 1.6; font-weight: 600; color: #111827;">${escapeHtml(data.outcomeNotes || 'No outcome notes available.')}</p>
+                    </td>
+                  </tr>
+                </table>
               </div>
 
               <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 28px; background-color: #fafafa;">
@@ -366,28 +461,48 @@ function buildCallReportHtml(data) {
                 <table width="100%" cellpadding="0" cellspacing="0" border="0">
                   <tr>
                     <td width="50%" valign="top" style="padding-bottom: 16px;">
+                      <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280;">Caller Name</p>
+                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${escapeHtml(data.callerName || 'Unknown Caller')}</p>
+                    </td>
+                    <td width="50%" valign="top" style="padding-bottom: 16px;">
+                      <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280;">Caller Phone</p>
+                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${escapeHtml(data.callerPhone || 'Unknown')}</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td width="50%" valign="top" style="padding-bottom: 16px;">
+                      <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280;">Email</p>
+                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${escapeHtml(data.email || 'Not captured')}</p>
+                    </td>
+                    <td width="50%" valign="top" style="padding-bottom: 16px;">
+                      <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280;">Business Name</p>
+                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${escapeHtml(data.businessName || 'Not captured')}</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td width="50%" valign="top" style="padding-bottom: 16px;">
                       <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280;">Product</p>
-                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${data.product || 'N/A'}</p>
+                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${escapeHtml(data.product || 'N/A')}</p>
                     </td>
                     <td width="50%" valign="top" style="padding-bottom: 16px;">
                       <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280;">Issue / Sub-Type</p>
-                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${data.issue || 'N/A'} (${data.subType || 'N/A'})</p>
+                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${escapeHtml(data.issue || 'N/A')} ${data.subType ? `(${escapeHtml(data.subType)})` : ''}</p>
                     </td>
                   </tr>
                   <tr>
                     <td width="50%" valign="top" style="padding-bottom: 16px;">
                       <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280;">Customer Type</p>
-                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${data.customerType || 'Unknown'}</p>
+                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${escapeHtml(data.customerType || 'Unknown')}</p>
                     </td>
                     <td width="50%" valign="top" style="padding-bottom: 16px;">
                       <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280;">Purchase Status</p>
-                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${data.purchaseStatus || 'Unknown'}</p>
+                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${escapeHtml(data.purchaseStatus || 'Unknown')}</p>
                     </td>
                   </tr>
                   <tr>
                     <td colspan="2" valign="top">
                       <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280;">Call Context</p>
-                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${data.callContext || 'N/A'}</p>
+                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${escapeHtml(data.callContext || 'N/A')}</p>
                     </td>
                   </tr>
                 </table>
@@ -395,8 +510,8 @@ function buildCallReportHtml(data) {
 
               <div style="margin-bottom: 28px;">
                 <h2 style="margin: 0 0 12px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #9ca3af; font-weight: 700;">Conversation Highlights</h2>
-                <ul style="margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.6; color: #374151;">
-                  ${data.conversationHighlightsHtml || ''}
+                <ul style="margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.7; color: #374151;">
+                  ${buildListHtml(data.conversationHighlights, 'No highlights captured.')}
                 </ul>
               </div>
 
@@ -406,21 +521,21 @@ function buildCallReportHtml(data) {
                   <tr>
                     <td width="50%" valign="top" style="padding-bottom: 16px;">
                       <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280;">Root Cause</p>
-                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${data.rootCause || 'Unknown'}</p>
+                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${escapeHtml(data.rootCause || 'Unknown')}</p>
                     </td>
                     <td width="50%" valign="top" style="padding-bottom: 16px;">
                       <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280;">Commercial Value</p>
-                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${data.commercialValue || 'Low'}</p>
+                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${escapeHtml(data.commercialValue || 'Low')}</p>
                     </td>
                   </tr>
                   <tr>
                     <td width="50%" valign="top">
                       <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280;">Upsell Opportunity</p>
-                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #71ab50;">${data.upsellOpportunity || 'Low'}</p>
+                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #71ab50;">${escapeHtml(data.upsellOpportunity || 'Low')}</p>
                     </td>
                     <td width="50%" valign="top">
                       <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280;">Escalation Status</p>
-                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${data.escalationStatus || 'No Escalation Needed'}</p>
+                      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #111827;">${escapeHtml(data.escalationStatus || 'No Escalation Needed')}</p>
                     </td>
                   </tr>
                 </table>
@@ -428,15 +543,15 @@ function buildCallReportHtml(data) {
 
               <div style="background-color: #fcfcfc; border: 1px solid #e5e7eb; border-left: 4px solid #71ab50; border-radius: 6px; padding: 20px; margin-bottom: 28px; box-shadow: 0 2px 4px rgba(0,0,0,0.01);">
                 <h2 style="margin: 0 0 12px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #9ca3af; font-weight: 700;">Recommended Actions</h2>
-                <ul style="margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.6; color: #111827;">
-                  ${data.recommendedActionsHtml || ''}
+                <ul style="margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.7; color: #111827;">
+                  ${buildListHtml(data.recommendedActions, 'No recommended actions.')}
                 </ul>
               </div>
 
               <div>
-                <h2 style="margin: 0 0 10px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #9ca3af; font-weight: 700;">Transcript Excerpt</h2>
+                <h2 style="margin: 0 0 10px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #9ca3af; font-weight: 700;">Full Transcript</h2>
                 <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; background-color: #f9fafb;">
-                  <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #4b5563; font-family: 'Courier New', Courier, monospace; white-space: pre-wrap;">${data.transcriptExcerpt || ''}</p>
+                  ${buildTranscriptHtml(data.transcriptLines)}
                 </div>
               </div>
             </td>
@@ -472,8 +587,119 @@ async function sendSummaryEmail(subject, body, htmlBody = null) {
     to: process.env.SUMMARY_EMAIL_TO,
     subject,
     text: body,
-    html: htmlBody || `<pre style="font-family: Arial, sans-serif; white-space: pre-wrap;">${body}</pre>`,
+    html: htmlBody || `<pre style="font-family: Arial, sans-serif; white-space: pre-wrap;">${escapeHtml(body)}</pre>`,
   });
+}
+
+async function analyzeCallWithOpenAI({ transcriptLines, callerPhone, durationText, reportDate }) {
+  const transcriptText =
+    transcriptLines.length > 0
+      ? transcriptLines.join('\n')
+      : 'No transcript available.';
+
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      temperature: 0.2,
+      input: [
+        {
+          role: 'system',
+          content: `
+You are a call intelligence analyst for Electronic World.
+
+Your job is to analyze a phone call transcript and return ONLY valid JSON.
+
+Important rules:
+- Do not guess facts that are not supported by the transcript.
+- If something is not stated, use "Unknown" or "Not captured".
+- If the issue was solved during the call, resolutionStatus must say "Resolved".
+- If the issue was not solved and a callback or team follow-up is needed, resolutionStatus must say "Follow-Up Needed".
+- If the caller was angry or demanded escalation, escalationNeeded should be "Yes".
+- If no escalation is needed, escalationNeeded should be "No".
+- If no follow-up is needed, followUpNeeded should be "No".
+- conversationHighlights must be short, concrete bullets from the actual call.
+- recommendedActions must reflect the actual call outcome.
+- executiveSummary must be 2 to 4 sentences, specific, and based only on the transcript.
+- outcomeNotes should clearly say whether the call was resolved and why.
+- category must be one of:
+  "Tech Support / Troubleshooting",
+  "Wholesale / Dealer Inquiry",
+  "Warranty / Returns",
+  "General Inquiry",
+  "Complaint / Escalation"
+- sentiment must be one of:
+  "Positive", "Neutral", "Frustrated", "Upset"
+- urgency must be one of:
+  "Low", "Medium", "High"
+- commercialValue must be one of:
+  "Low", "Medium", "High"
+- upsellOpportunity must be one of:
+  "Low", "Medium", "High"
+- leadOpportunity must be one of:
+  "None", "Possible", "Strong"
+
+Return JSON with exactly these keys:
+{
+  "callerName": "",
+  "email": "",
+  "businessName": "",
+  "category": "",
+  "resolutionStatus": "",
+  "urgency": "",
+  "sentiment": "",
+  "executiveSummary": "",
+  "followUpNeeded": "",
+  "escalationNeeded": "",
+  "leadOpportunity": "",
+  "outcomeNotes": "",
+  "product": "",
+  "issue": "",
+  "subType": "",
+  "customerType": "",
+  "purchaseStatus": "",
+  "callContext": "",
+  "rootCause": "",
+  "commercialValue": "",
+  "upsellOpportunity": "",
+  "escalationStatus": "",
+  "conversationHighlights": [],
+  "recommendedActions": []
+}
+          `.trim()
+        },
+        {
+          role: 'user',
+          content: `
+Call date: ${reportDate}
+Caller phone from Twilio: ${callerPhone || 'Unknown'}
+Call duration: ${durationText}
+
+Transcript:
+${transcriptText}
+          `.trim()
+        }
+      ]
+    })
+  });
+
+  const result = await response.json();
+  const outputText =
+    result.output_text ||
+    result.output?.[0]?.content?.[0]?.text ||
+    '';
+
+  const parsed = safeJsonParse(outputText);
+
+  if (!parsed) {
+    throw new Error(`Could not parse structured call analysis JSON. Raw output: ${outputText}`);
+  }
+
+  return parsed;
 }
 
 // Root Route
@@ -483,6 +709,9 @@ fastify.get('/', async (_request, reply) => {
 
 // Route for Twilio to handle incoming calls
 fastify.all('/incoming-call', async (request, reply) => {
+  const callerPhone = request.body?.From || request.query?.From || 'Unknown';
+  const callSid = request.body?.CallSid || request.query?.CallSid || 'Unknown';
+
   const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Start>
@@ -497,7 +726,10 @@ fastify.all('/incoming-call', async (request, reply) => {
   <Say voice="Google.en-US-Chirp3-HD-Aoede">Hi there! My name is Genesis. How can I help today?</Say>
 
   <Connect>
-    <Stream url="wss://${request.headers.host}/media-stream" />
+    <Stream url="wss://${request.headers.host}/media-stream">
+      <Parameter name="callerPhone" value="${escapeHtml(callerPhone)}" />
+      <Parameter name="callSid" value="${escapeHtml(callSid)}" />
+    </Stream>
   </Connect>
 </Response>`;
 
@@ -519,12 +751,16 @@ fastify.register(async (fastifyInstance) => {
   fastifyInstance.get('/media-stream', { websocket: true }, (connection, req) => {
     console.log('Client connected');
 
-    let transcript = [];
+    const transcript = [];
     let streamSid = null;
     let latestMediaTimestamp = 0;
     let lastAssistantItem = null;
     let markQueue = [];
     let responseStartTimestampTwilio = null;
+
+    let callerPhone = 'Unknown';
+    let callSid = 'Unknown';
+    const callStartedAt = Date.now();
 
     const openAiWs = new WebSocket(`wss://api.openai.com/v1/realtime?model=gpt-realtime&temperature=${TEMPERATURE}`, {
       headers: {
@@ -551,16 +787,16 @@ fastify.register(async (fastifyInstance) => {
           },
           instructions:
             SYSTEM_MESSAGE +
-            "\n\n============================\nEW CORE COMPANY + POLICIES\n============================\n" +
+            '\n\n============================\nEW CORE COMPANY + POLICIES\n============================\n' +
             EW_CORE_CARD +
-            "\n\n============================\nEW ENTERPRISE STRATEGIC INTELLIGENCE\n============================\n" +
+            '\n\n============================\nEW ENTERPRISE STRATEGIC INTELLIGENCE\n============================\n' +
             EW_ENTERPRISE_CARD +
-            "\n\n============================\nINTERNAL PRODUCT SUPPORT CARD: PLAY FORCE\n============================\n" +
+            '\n\n============================\nINTERNAL PRODUCT SUPPORT CARD: PLAY FORCE\n============================\n' +
             PLAYFORCE_SUPPORT_CARD,
         },
       };
 
-      console.log('Sending session update:', JSON.stringify(sessionUpdate));
+      console.log('Sending session update');
       openAiWs.send(JSON.stringify(sessionUpdate));
     };
 
@@ -615,15 +851,17 @@ fastify.register(async (fastifyInstance) => {
         const response = JSON.parse(data);
 
         if (LOG_EVENT_TYPES.includes(response.type)) {
-          console.log(`Received event: ${response.type}`, response);
+          console.log(`Received event: ${response.type}`);
         }
 
         if (response.type === 'response.audio_transcript.done' && response.transcript) {
-          transcript.push(`AI: ${response.transcript}`);
+          const text = String(response.transcript).trim();
+          if (text) transcript.push(`AI: ${text}`);
         }
 
         if (response.type === 'conversation.item.input_audio_transcription.completed' && response.transcript) {
-          transcript.push(`Caller: ${response.transcript}`);
+          const text = String(response.transcript).trim();
+          if (text) transcript.push(`Caller: ${text}`);
         }
 
         if (response.type === 'response.output_audio.delta' && response.delta) {
@@ -676,6 +914,15 @@ fastify.register(async (fastifyInstance) => {
           case 'start':
             streamSid = data.start.streamSid;
             console.log('Incoming stream has started', streamSid);
+
+            if (data.start?.customParameters) {
+              callerPhone = data.start.customParameters.callerPhone || 'Unknown';
+              callSid = data.start.customParameters.callSid || 'Unknown';
+            }
+
+            console.log('Caller phone:', callerPhone);
+            console.log('Call SID:', callSid);
+
             responseStartTimestampTwilio = null;
             latestMediaTimestamp = 0;
             break;
@@ -699,96 +946,138 @@ fastify.register(async (fastifyInstance) => {
       try {
         if (openAiWs.readyState === WebSocket.OPEN) openAiWs.close();
 
-        const subject = `[EW AI CALL SUMMARY] ${new Date().toLocaleString()}`;
+        const callEndedAt = Date.now();
+        const durationSeconds = Math.round((callEndedAt - callStartedAt) / 1000);
+        const durationText = formatDurationFromSeconds(durationSeconds);
+        const reportDate = new Date().toLocaleString();
 
-        const body = `PURPOSE:
-Unknown (tagging upgrade next)
+        const transcriptLines = transcript.length > 0 ? transcript : ['No transcript available.'];
 
-SUMMARY:
-- AI receptionist handled a call.
-- Product support card was available for Play Force.
-- Caller may have asked for support, wholesale, warranty, or general info.
+        console.log('TRANSCRIPT DEBUG:');
+        console.log(transcriptLines.join('\n'));
 
-CUSTOMER INFO CAPTURED:
-- Name:
-- Phone:
-- Email:
-- Business (if any):
-- Product (if any):
+        let analysis;
+        try {
+          analysis = await analyzeCallWithOpenAI({
+            transcriptLines,
+            callerPhone,
+            durationText,
+            reportDate
+          });
+        } catch (analysisError) {
+          console.error('❌ Structured call analysis failed:', analysisError);
 
-NEXT STEPS:
-- If caller requested follow-up, return call ASAP.
-- If wholesale lead, route to account manager.
-- If warranty, route to support team.
-
-URGENCY:
-Medium`;
-
-        const reportSourceText = transcript.length > 0 ? transcript.join('\n') : body;
-
-        const aiSummaryResponse = await fetch("https://api.openai.com/v1/responses", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${OPENAI_API_KEY}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            model: "gpt-4o-mini",
-            input: [
-              {
-                role: "system",
-                content: "You are an AI call analyst for a premium consumer electronics company. Write a short, clean, professional executive summary of the call in 2 to 4 sentences. Do not use markdown. Do not use bullet points. Do not repeat labels like PURPOSE, SUMMARY, NEXT STEPS, or CUSTOMER INFO. Do not mention missing information unless absolutely necessary. Make it read like a polished business summary for management."
-              },
-              {
-                role: "user",
-                content: `Write a polished executive summary based on this call record. Be specific. State what the caller needed, what the AI did, whether the issue was resolved, whether the caller requested follow-up, and whether there is any lead or sales opportunity. Do not be vague. Do not say the intent is unclear unless the transcript truly is unclear.\n\nCall record:\n${reportSourceText}`
-              }
-            ],
-            temperature: 0.4
-          })
-        });
-
-        const aiSummaryData = await aiSummaryResponse.json();
-        const cleanSummary =
-          aiSummaryData.output?.[0]?.content?.[0]?.text ||
-          aiSummaryData.output_text ||
-          reportSourceText;
-
-        console.log("TRANSCRIPT DEBUG:", reportSourceText);
+          analysis = {
+            callerName: 'Unknown Caller',
+            email: 'Not captured',
+            businessName: 'Not captured',
+            category: 'General Inquiry',
+            resolutionStatus: 'Unknown',
+            urgency: 'Medium',
+            sentiment: 'Neutral',
+            executiveSummary: 'A call was handled by the AI receptionist, but the structured post-call analysis could not be fully generated for this call. Please review the transcript directly below.',
+            followUpNeeded: 'Unknown',
+            escalationNeeded: 'Unknown',
+            leadOpportunity: 'None',
+            outcomeNotes: 'Structured analysis failed, so the transcript should be reviewed manually.',
+            product: 'N/A',
+            issue: 'N/A',
+            subType: '',
+            customerType: 'Unknown',
+            purchaseStatus: 'Unknown',
+            callContext: 'General Call',
+            rootCause: 'Unknown',
+            commercialValue: 'Low',
+            upsellOpportunity: 'Low',
+            escalationStatus: 'Unknown',
+            conversationHighlights: ['Structured analysis was unavailable for this call.'],
+            recommendedActions: ['Review the transcript manually.']
+          };
+        }
 
         const reportData = {
-          logoUrl: "https://via.placeholder.com/120x40?text=EW",
-          reportDate: new Date().toLocaleString(),
-          callerName: "Unknown Caller",
-          callerPhone: "Unknown",
-          callDuration: "N/A",
+          logoUrl: 'https://via.placeholder.com/120x40?text=EW',
+          reportDate,
+          callerName: analysis.callerName || 'Unknown Caller',
+          callerPhone: callerPhone || 'Unknown',
+          callDuration: durationText,
 
-          category: "General Inquiry",
-          resolutionStatus: "Follow-Up Needed",
-          urgency: "Medium",
-          sentiment: "Neutral",
+          category: analysis.category || 'General Inquiry',
+          resolutionStatus: analysis.resolutionStatus || 'Unknown',
+          urgency: analysis.urgency || 'Medium',
+          sentiment: analysis.sentiment || 'Neutral',
 
-          executiveSummary: cleanSummary,
+          executiveSummary: analysis.executiveSummary || 'No summary available.',
 
-          product: "N/A",
-          issue: "N/A",
-          subType: "N/A",
-          customerType: "Unknown",
-          purchaseStatus: "Unknown",
-          callContext: "General Call",
+          followUpNeeded: analysis.followUpNeeded || 'Unknown',
+          escalationNeeded: analysis.escalationNeeded || 'Unknown',
+          leadOpportunity: analysis.leadOpportunity || 'None',
+          outcomeNotes: analysis.outcomeNotes || 'No outcome notes available.',
 
-          rootCause: "Unknown",
-          commercialValue: "Low",
-          upsellOpportunity: "Low",
-          escalationStatus: "No Escalation Needed",
+          email: analysis.email || 'Not captured',
+          businessName: analysis.businessName || 'Not captured',
+          product: analysis.product || 'N/A',
+          issue: analysis.issue || 'N/A',
+          subType: analysis.subType || '',
+          customerType: analysis.customerType || 'Unknown',
+          purchaseStatus: analysis.purchaseStatus || 'Unknown',
+          callContext: analysis.callContext || 'General Call',
 
-          conversationHighlightsHtml: `<li>No structured highlights yet</li>`,
-          recommendedActionsHtml: `<li>Review call manually</li>`,
-          transcriptExcerpt: reportSourceText || "No transcript available"
+          rootCause: analysis.rootCause || 'Unknown',
+          commercialValue: analysis.commercialValue || 'Low',
+          upsellOpportunity: analysis.upsellOpportunity || 'Low',
+          escalationStatus: analysis.escalationStatus || 'No Escalation Needed',
+
+          conversationHighlights: analysis.conversationHighlights || [],
+          recommendedActions: analysis.recommendedActions || [],
+          transcriptLines
         };
 
+        const subject = `[EW AI CALL SUMMARY] ${reportDate} | ${reportData.category} | ${reportData.resolutionStatus}`;
+
+        const plainTextBody = `
+Electronic World - Call Intelligence Report
+
+Date: ${reportDate}
+Caller Name: ${reportData.callerName}
+Caller Phone: ${reportData.callerPhone}
+Call Duration: ${reportData.callDuration}
+Category: ${reportData.category}
+Resolution: ${reportData.resolutionStatus}
+Urgency: ${reportData.urgency}
+Sentiment: ${reportData.sentiment}
+
+Executive Summary:
+${reportData.executiveSummary}
+
+Call Outcome:
+- Follow-Up Needed: ${reportData.followUpNeeded}
+- Escalation Needed: ${reportData.escalationNeeded}
+- Lead Opportunity: ${reportData.leadOpportunity}
+- Outcome Notes: ${reportData.outcomeNotes}
+
+Key Business Details:
+- Email: ${reportData.email}
+- Business Name: ${reportData.businessName}
+- Product: ${reportData.product}
+- Issue: ${reportData.issue}
+- Sub-Type: ${reportData.subType || 'N/A'}
+- Customer Type: ${reportData.customerType}
+- Purchase Status: ${reportData.purchaseStatus}
+- Call Context: ${reportData.callContext}
+
+Conversation Highlights:
+${normalizeList(reportData.conversationHighlights).map((x) => `- ${x}`).join('\n') || '- None'}
+
+Recommended Actions:
+${normalizeList(reportData.recommendedActions).map((x) => `- ${x}`).join('\n') || '- None'}
+
+Full Transcript:
+${transcriptLines.join('\n')}
+        `.trim();
+
         const htmlBody = buildCallReportHtml(reportData);
-        await sendSummaryEmail(subject, body, htmlBody);
+        await sendSummaryEmail(subject, plainTextBody, htmlBody);
         console.log('✅ Summary email sent.');
       } catch (err) {
         console.error('❌ Summary email failed:', err);
