@@ -329,7 +329,23 @@ function normalizeList(value, fallback = []) {
 
 function safeJsonParse(text) {
   try {
-    return JSON.parse(text);
+    if (!text) return null;
+
+    let cleaned = String(text).trim();
+
+    if (cleaned.startsWith('```json')) {
+      cleaned = cleaned.replace(/^```json\s*/i, '');
+    } else if (cleaned.startsWith('```')) {
+      cleaned = cleaned.replace(/^```\s*/i, '');
+    }
+
+    if (cleaned.endsWith('```')) {
+      cleaned = cleaned.replace(/\s*```$/i, '');
+    }
+
+    cleaned = cleaned.trim();
+
+    return JSON.parse(cleaned);
   } catch {
     return null;
   }
@@ -775,6 +791,9 @@ fastify.register(async (fastifyInstance) => {
           type: 'realtime',
           model: 'gpt-realtime',
           output_modalities: ['audio'],
+          input_audio_transcription: {
+            model: 'gpt-4o-mini-transcribe'
+          },
           audio: {
             input: {
               format: { type: 'audio/pcmu' },
@@ -856,12 +875,18 @@ fastify.register(async (fastifyInstance) => {
 
         if (response.type === 'response.audio_transcript.done' && response.transcript) {
           const text = String(response.transcript).trim();
-          if (text) transcript.push(`AI: ${text}`);
+          if (text) {
+            console.log('AI TRANSCRIPT:', text);
+            transcript.push(`AI: ${text}`);
+          }
         }
 
         if (response.type === 'conversation.item.input_audio_transcription.completed' && response.transcript) {
           const text = String(response.transcript).trim();
-          if (text) transcript.push(`Caller: ${text}`);
+          if (text) {
+            console.log('CALLER TRANSCRIPT:', text);
+            transcript.push(`Caller: ${text}`);
+          }
         }
 
         if (response.type === 'response.output_audio.delta' && response.delta) {
@@ -931,6 +956,10 @@ fastify.register(async (fastifyInstance) => {
             if (markQueue.length > 0) {
               markQueue.shift();
             }
+            break;
+
+          case 'stop':
+            console.log('Received stop event from Twilio');
             break;
 
           default:
