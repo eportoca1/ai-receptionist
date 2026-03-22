@@ -747,7 +747,10 @@ const aiSummaryResponse = await fetch("https://api.openai.com/v1/responses", {
         content: "You are an AI call analyst for a premium consumer electronics company. Write a short, clean, professional executive summary of the call in 2 to 4 sentences. Do not use markdown. Do not use bullet points. Do not repeat labels like PURPOSE, SUMMARY, NEXT STEPS, or CUSTOMER INFO. Do not mention missing information unless absolutely necessary. Make it read like a polished business summary for management."
       },
       {
-content: `Write a polished executive summary based on this internal call note. Focus on what the caller wanted, what the AI handled, any likely customer intent, and whether follow-up may be needed.\n\nInternal call note:\n${body}`,
+        role: "user",
+        content: `Write a polished executive summary based on this internal call note. Focus on what the caller wanted, what the AI handled, any likely customer intent, and whether follow-up may be needed.\n\nInternal call note:\n${body}`
+      }
+    ],
     temperature: 0.4
   })
 });
