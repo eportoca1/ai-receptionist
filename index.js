@@ -1079,7 +1079,7 @@ fastify.post('/recording-status', async (request, reply) => {
     const polishedAnalysis = applyAnalysisPolish(analysis, callerPhone);
 
     const reportData = {
-      logoUrl: process.env.REPORT_LOGO_URL || 'https://via.placeholder.com/120x40?text=EW',
+logoUrl: process.env.REPORT_LOGO_URL || 'https://i.imgur.com/eYFsbtR.png',
       reportDate,
       callerName: polishedAnalysis.callerName || 'Unknown Caller',
       callerPhone: callerPhone || 'Unknown',
