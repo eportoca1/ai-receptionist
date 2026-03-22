@@ -13,8 +13,8 @@ dotenv.config();
 const { OPENAI_API_KEY } = process.env;
 
 if (!OPENAI_API_KEY) {
-    console.error('Missing OpenAI API key. Please set it in the .env file.');
-    process.exit(1);
+  console.error('Missing OpenAI API key. Please set it in the .env file.');
+  process.exit(1);
 }
 
 // Initialize Fastify
@@ -23,7 +23,7 @@ fastify.register(fastifyFormBody);
 fastify.register(fastifyWs);
 
 // Constants
-const SYSTEM_MESSAGE =`
+const SYSTEM_MESSAGE = `
 You are "Genesis", the Electronic World AI Receptionist — a modern, upbeat, youth-friendly voice that feels human, bubbly, and helpful. 
 Your vibe: energetic, confident, funny when appropriate, never robotic. Short sentences. Warm tone. Clear next steps.
 
@@ -253,45 +253,51 @@ Collect best callback number and email.
 CLOSING:
 End calls warmly and confidently. Confirm next steps.
 `;
+
 // Load Play Force support card
 let PLAYFORCE_SUPPORT_CARD = '';
 try {
-    PLAYFORCE_SUPPORT_CARD = fs.readFileSync('knowledge/playforce_controller.md', 'utf8');
-    console.log('✅ Loaded Play Force support card');
+  PLAYFORCE_SUPPORT_CARD = fs.readFileSync('knowledge/playforce_controller.md', 'utf8');
+  console.log('✅ Loaded Play Force support card');
 } catch (e) {
-    console.log('⚠️ Could not load knowledge/playforce_controller.md');
+  console.log('⚠️ Could not load knowledge/playforce_controller.md');
 }
+
 // Load EW core company + policies card
 let EW_CORE_CARD = '';
 try {
-    EW_CORE_CARD = fs.readFileSync('knowledge/ew_core.md', 'utf8');
-    console.log('✅ Loaded EW core knowledge');
+  EW_CORE_CARD = fs.readFileSync('knowledge/ew_core.md', 'utf8');
+  console.log('✅ Loaded EW core knowledge');
 } catch (e) {
-    console.log('⚠️ Could not load knowledge/ew_core.md');
+  console.log('⚠️ Could not load knowledge/ew_core.md');
 }
+
 // Load EW enterprise strategic card
 let EW_ENTERPRISE_CARD = '';
 try {
-    EW_ENTERPRISE_CARD = fs.readFileSync('knowledge/ew_enterprise.md', 'utf8');
-    console.log('✅ Loaded EW enterprise knowledge');
+  EW_ENTERPRISE_CARD = fs.readFileSync('knowledge/ew_enterprise.md', 'utf8');
+  console.log('✅ Loaded EW enterprise knowledge');
 } catch (e) {
-    console.log('⚠️ Could not load knowledge/ew_enterprise.md');
+  console.log('⚠️ Could not load knowledge/ew_enterprise.md');
 }
-const VOICE = 'marin';
-const TEMPERATURE = 0.92; // Controls the randomness of the AI's responses
-const PORT = process.env.PORT || 5050; // Allow dynamic port assignment
 
-// List of Event Types to log to the console. See the OpenAI Realtime API Documentation: https://platform.openai.com/docs/api-reference/realtime
+const VOICE = 'marin';
+const TEMPERATURE = 0.92;
+const PORT = process.env.PORT || 5050;
+
+// List of Event Types to log to the console.
 const LOG_EVENT_TYPES = [
-    'error',
-    'response.content.done',
-    'rate_limits.updated',
-    'response.done',
-    'input_audio_buffer.committed',
-    'input_audio_buffer.speech_stopped',
-    'input_audio_buffer.speech_started',
-    'session.created',
-    'session.updated'
+  'error',
+  'response.content.done',
+  'response.audio_transcript.done',
+  'conversation.item.input_audio_transcription.completed',
+  'rate_limits.updated',
+  'response.done',
+  'input_audio_buffer.committed',
+  'input_audio_buffer.speech_stopped',
+  'input_audio_buffer.speech_started',
+  'session.created',
+  'session.updated'
 ];
 
 // Show AI response elapsed timing calculations
@@ -450,8 +456,6 @@ function buildCallReportHtml(data) {
 </html>`;
 }
 
-
-
 async function sendSummaryEmail(subject, body, htmlBody = null) {
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
@@ -463,21 +467,21 @@ async function sendSummaryEmail(subject, body, htmlBody = null) {
     },
   });
 
-await transporter.sendMail({
-  from: `EW AI Receptionist <${process.env.SMTP_USER}>`,
-  to: process.env.SUMMARY_EMAIL_TO,
-  subject,
-  text: body,
-  html: htmlBody || `<pre style="font-family: Arial, sans-serif; white-space: pre-wrap;">${body}</pre>`,
-});
+  await transporter.sendMail({
+    from: `EW AI Receptionist <${process.env.SMTP_USER}>`,
+    to: process.env.SUMMARY_EMAIL_TO,
+    subject,
+    text: body,
+    html: htmlBody || `<pre style="font-family: Arial, sans-serif; white-space: pre-wrap;">${body}</pre>`,
+  });
 }
+
 // Root Route
-fastify.get('/', async (request, reply) => {
-    reply.send({ message: 'Twilio Media Stream Server is running!' });
+fastify.get('/', async (_request, reply) => {
+  reply.send({ message: 'Twilio Media Stream Server is running!' });
 });
 
 // Route for Twilio to handle incoming calls
-// <Say> punctuation to improve text-to-speech translation
 fastify.all('/incoming-call', async (request, reply) => {
   const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -499,7 +503,8 @@ fastify.all('/incoming-call', async (request, reply) => {
 
   reply.type('text/xml').send(twimlResponse);
 });
-// Recording status webhook (Twilio calls this after recording is complete)
+
+// Recording status webhook
 fastify.post('/recording-status', async (request, reply) => {
   console.log('📼 Recording callback received');
   console.log('CallSid:', request.body.CallSid);
@@ -508,209 +513,195 @@ fastify.post('/recording-status', async (request, reply) => {
 
   reply.send({ ok: true });
 });
+
 // WebSocket route for media-stream
-fastify.register(async (fastify) => {
-    fastify.get('/media-stream', { websocket: true }, (connection, req) => {
-        console.log('Client connected');
-        let transcript = [];
+fastify.register(async (fastifyInstance) => {
+  fastifyInstance.get('/media-stream', { websocket: true }, (connection, req) => {
+    console.log('Client connected');
 
-        // Connection-specific state
-        let streamSid = null;
-        let latestMediaTimestamp = 0;
-        let lastAssistantItem = null;
-        let markQueue = [];
-        let responseStartTimestampTwilio = null;
+    let transcript = [];
+    let streamSid = null;
+    let latestMediaTimestamp = 0;
+    let lastAssistantItem = null;
+    let markQueue = [];
+    let responseStartTimestampTwilio = null;
 
-const openAiWs = new WebSocket(`wss://api.openai.com/v1/realtime?model=gpt-realtime&temperature=${TEMPERATURE}`, {
-            headers: {
-                Authorization: `Bearer ${OPENAI_API_KEY}`,
-            }
-        });
+    const openAiWs = new WebSocket(`wss://api.openai.com/v1/realtime?model=gpt-realtime&temperature=${TEMPERATURE}`, {
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+      }
+    });
 
-        // Control initial session with OpenAI
-        const initializeSession = () => {
-            const sessionUpdate = {
-                type: 'session.update',
-                session: {
-                    type: 'realtime',
-                    model: "gpt-realtime",
-                    output_modalities: ["audio"],
-                    audio: {
-                        input: { format: { type: 'audio/pcmu' }, turn_detection: { type: "server_vad" } },
-                        output: { format: { type: 'audio/pcmu' }, voice: VOICE },
-                    },
-instructions: SYSTEM_MESSAGE +
-  "\n\n============================\nEW CORE COMPANY + POLICIES\n============================\n" +
-  EW_CORE_CARD +
-  "\n\n============================\nEW ENTERPRISE STRATEGIC INTELLIGENCE\n============================\n" +
-  EW_ENTERPRISE_CARD +
-  "\n\n============================\nINTERNAL PRODUCT SUPPORT CARD: PLAY FORCE\n============================\n" +
-  PLAYFORCE_SUPPORT_CARD,
-                },
-            };
+    const initializeSession = () => {
+      const sessionUpdate = {
+        type: 'session.update',
+        session: {
+          type: 'realtime',
+          model: 'gpt-realtime',
+          output_modalities: ['audio'],
+          audio: {
+            input: {
+              format: { type: 'audio/pcmu' },
+              turn_detection: { type: 'server_vad' }
+            },
+            output: {
+              format: { type: 'audio/pcmu' },
+              voice: VOICE
+            },
+          },
+          instructions:
+            SYSTEM_MESSAGE +
+            "\n\n============================\nEW CORE COMPANY + POLICIES\n============================\n" +
+            EW_CORE_CARD +
+            "\n\n============================\nEW ENTERPRISE STRATEGIC INTELLIGENCE\n============================\n" +
+            EW_ENTERPRISE_CARD +
+            "\n\n============================\nINTERNAL PRODUCT SUPPORT CARD: PLAY FORCE\n============================\n" +
+            PLAYFORCE_SUPPORT_CARD,
+        },
+      };
 
-            console.log('Sending session update:', JSON.stringify(sessionUpdate));
-            openAiWs.send(JSON.stringify(sessionUpdate));
+      console.log('Sending session update:', JSON.stringify(sessionUpdate));
+      openAiWs.send(JSON.stringify(sessionUpdate));
+    };
 
-            // Uncomment the following line to have AI speak first:
-            // sendInitialConversationItem();
+    const handleSpeechStartedEvent = () => {
+      if (markQueue.length > 0 && responseStartTimestampTwilio != null) {
+        const elapsedTime = latestMediaTimestamp - responseStartTimestampTwilio;
+        if (SHOW_TIMING_MATH) {
+          console.log(`Calculating elapsed time for truncation: ${latestMediaTimestamp} - ${responseStartTimestampTwilio} = ${elapsedTime}ms`);
+        }
+
+        if (lastAssistantItem) {
+          const truncateEvent = {
+            type: 'conversation.item.truncate',
+            item_id: lastAssistantItem,
+            content_index: 0,
+            audio_end_ms: elapsedTime
+          };
+          if (SHOW_TIMING_MATH) console.log('Sending truncation event:', JSON.stringify(truncateEvent));
+          openAiWs.send(JSON.stringify(truncateEvent));
+        }
+
+        connection.send(JSON.stringify({
+          event: 'clear',
+          streamSid
+        }));
+
+        markQueue = [];
+        lastAssistantItem = null;
+        responseStartTimestampTwilio = null;
+      }
+    };
+
+    const sendMark = (socketConnection, currentStreamSid) => {
+      if (currentStreamSid) {
+        const markEvent = {
+          event: 'mark',
+          streamSid: currentStreamSid,
+          mark: { name: 'responsePart' }
         };
+        socketConnection.send(JSON.stringify(markEvent));
+        markQueue.push('responsePart');
+      }
+    };
 
-        // Send initial conversation item if AI talks first
-        const sendInitialConversationItem = () => {
-            const initialConversationItem = {
-                type: 'conversation.item.create',
-                item: {
-                    type: 'message',
-                    role: 'user',
-                    content: [
-                        {
-                            type: 'input_text',
-                            text: 'Start with: "Hi! Thank you for calling Electronic World. This is Genesis. How can I help you today?"'
-                        }
-                    ]
-                }
-            };
+    openAiWs.on('open', () => {
+      console.log('Connected to the OpenAI Realtime API');
+      setTimeout(initializeSession, 600);
+    });
 
-            if (SHOW_TIMING_MATH) console.log('Sending initial conversation item:', JSON.stringify(initialConversationItem));
-            openAiWs.send(JSON.stringify(initialConversationItem));
-            openAiWs.send(JSON.stringify({ type: 'response.create' }));
-        };
+    openAiWs.on('message', (data) => {
+      try {
+        const response = JSON.parse(data);
 
-        // Handle interruption when the caller's speech starts
-        const handleSpeechStartedEvent = () => {
-            if (markQueue.length > 0 && responseStartTimestampTwilio != null) {
-                const elapsedTime = latestMediaTimestamp - responseStartTimestampTwilio;
-                if (SHOW_TIMING_MATH) console.log(`Calculating elapsed time for truncation: ${latestMediaTimestamp} - ${responseStartTimestampTwilio} = ${elapsedTime}ms`);
+        if (LOG_EVENT_TYPES.includes(response.type)) {
+          console.log(`Received event: ${response.type}`, response);
+        }
 
-                if (lastAssistantItem) {
-                    const truncateEvent = {
-                        type: 'conversation.item.truncate',
-                        item_id: lastAssistantItem,
-                        content_index: 0,
-                        audio_end_ms: elapsedTime
-                    };
-                    if (SHOW_TIMING_MATH) console.log('Sending truncation event:', JSON.stringify(truncateEvent));
-                    openAiWs.send(JSON.stringify(truncateEvent));
-                }
+        if (response.type === 'response.audio_transcript.done' && response.transcript) {
+          transcript.push(`AI: ${response.transcript}`);
+        }
 
-                connection.send(JSON.stringify({
-                    event: 'clear',
-                    streamSid: streamSid
-                }));
+        if (response.type === 'conversation.item.input_audio_transcription.completed' && response.transcript) {
+          transcript.push(`Caller: ${response.transcript}`);
+        }
 
-                // Reset
-                markQueue = [];
-                lastAssistantItem = null;
-                responseStartTimestampTwilio = null;
+        if (response.type === 'response.output_audio.delta' && response.delta) {
+          const audioDelta = {
+            event: 'media',
+            streamSid,
+            media: { payload: response.delta }
+          };
+          connection.send(JSON.stringify(audioDelta));
+
+          if (!responseStartTimestampTwilio) {
+            responseStartTimestampTwilio = latestMediaTimestamp;
+            if (SHOW_TIMING_MATH) console.log(`Setting start timestamp for new response: ${responseStartTimestampTwilio}ms`);
+          }
+
+          if (response.item_id) {
+            lastAssistantItem = response.item_id;
+          }
+
+          sendMark(connection, streamSid);
+        }
+
+        if (response.type === 'input_audio_buffer.speech_started') {
+          handleSpeechStartedEvent();
+        }
+      } catch (error) {
+        console.error('Error processing OpenAI message:', error, 'Raw message:', data);
+      }
+    });
+
+    connection.on('message', (message) => {
+      try {
+        const data = JSON.parse(message);
+
+        switch (data.event) {
+          case 'media':
+            latestMediaTimestamp = data.media.timestamp;
+            if (SHOW_TIMING_MATH) {
+              console.log(`Received media message with timestamp: ${latestMediaTimestamp}ms`);
             }
-        };
-
-        // Send mark messages to Media Streams so we know if and when AI response playback is finished
-        const sendMark = (connection, streamSid) => {
-            if (streamSid) {
-                const markEvent = {
-                    event: 'mark',
-                    streamSid: streamSid,
-                    mark: { name: 'responsePart' }
-                };
-                connection.send(JSON.stringify(markEvent));
-                markQueue.push('responsePart');
+            if (openAiWs.readyState === WebSocket.OPEN) {
+              const audioAppend = {
+                type: 'input_audio_buffer.append',
+                audio: data.media.payload
+              };
+              openAiWs.send(JSON.stringify(audioAppend));
             }
-        };
+            break;
 
-        // Open event for OpenAI WebSocket
-        openAiWs.on('open', () => {
-            console.log('Connected to the OpenAI Realtime API');
-            setTimeout(initializeSession, 600);
-        });
+          case 'start':
+            streamSid = data.start.streamSid;
+            console.log('Incoming stream has started', streamSid);
+            responseStartTimestampTwilio = null;
+            latestMediaTimestamp = 0;
+            break;
 
-        // Listen for messages from the OpenAI WebSocket (and send to Twilio if necessary)
-        openAiWs.on('message', (data) => {
-            try {
-                const response = JSON.parse(data);
-
-                if (LOG_EVENT_TYPES.includes(response.type)) {
-                    console.log(`Received event: ${response.type}`, response);
-                }
-
-                if (response.type === 'response.output_audio.delta' && response.delta) {
-                    const audioDelta = {
-                        event: 'media',
-                        streamSid: streamSid,
-                        media: { payload: response.delta }
-                    };
-                    connection.send(JSON.stringify(audioDelta));
-
-                    // First delta from a new response starts the elapsed time counter
-                    if (!responseStartTimestampTwilio) {
-                        responseStartTimestampTwilio = latestMediaTimestamp;
-                        if (SHOW_TIMING_MATH) console.log(`Setting start timestamp for new response: ${responseStartTimestampTwilio}ms`);
-                    }
-
-                    if (response.item_id) {
-                        lastAssistantItem = response.item_id;
-                    }
-                    
-                    sendMark(connection, streamSid);
-                }
-
-                if (response.type === 'input_audio_buffer.speech_started') {
-                    handleSpeechStartedEvent();
-                }
-            } catch (error) {
-                console.error('Error processing OpenAI message:', error, 'Raw message:', data);
+          case 'mark':
+            if (markQueue.length > 0) {
+              markQueue.shift();
             }
-        });
+            break;
 
-        // Handle incoming messages from Twilio
-        connection.on('message', (message) => {
-            try {
-                const data = JSON.parse(message);
+          default:
+            console.log('Received non-media event:', data.event);
+            break;
+        }
+      } catch (error) {
+        console.error('Error parsing message:', error, 'Message:', message);
+      }
+    });
 
-                switch (data.event) {
-                    case 'media':
-                        latestMediaTimestamp = data.media.timestamp;
-                        if (SHOW_TIMING_MATH) console.log(`Received media message with timestamp: ${latestMediaTimestamp}ms`);
-                        if (openAiWs.readyState === WebSocket.OPEN) {
-                            const audioAppend = {
-                                type: 'input_audio_buffer.append',
-                                audio: data.media.payload
-                            };
-                            openAiWs.send(JSON.stringify(audioAppend));
-                        }
-                        break;
-                    case 'start':
-                        streamSid = data.start.streamSid;
-                        console.log('Incoming stream has started', streamSid);
-
-                        // Reset start and media timestamp on a new stream
-                        responseStartTimestampTwilio = null; 
-                        latestMediaTimestamp = 0;
-                        break;
-                    case 'mark':
-                        if (markQueue.length > 0) {
-                            markQueue.shift();
-                        }
-                        break;
-                    default:
-                        console.log('Received non-media event:', data.event);
-                        break;
-                }
-            } catch (error) {
-                console.error('Error parsing message:', error, 'Message:', message);
-            }
-        });
-
-        // Handle connection close
-connection.on('close', async () => {
-    try {
+    connection.on('close', async () => {
+      try {
         if (openAiWs.readyState === WebSocket.OPEN) openAiWs.close();
 
         const subject = `[EW AI CALL SUMMARY] ${new Date().toLocaleString()}`;
 
-        const body =
-`PURPOSE:
+        const body = `PURPOSE:
 Unknown (tagging upgrade next)
 
 SUMMARY:
@@ -732,87 +723,94 @@ NEXT STEPS:
 
 URGENCY:
 Medium`;
-// Generate AI executive summary
-const aiSummaryResponse = await fetch("https://api.openai.com/v1/responses", {
-  method: "POST",
-  headers: {
-    "Authorization": `Bearer ${OPENAI_API_KEY}`,
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    model: "gpt-4o-mini",
-    input: [
-      {
-        role: "system",
-        content: "You are an AI call analyst for a premium consumer electronics company. Write a short, clean, professional executive summary of the call in 2 to 4 sentences. Do not use markdown. Do not use bullet points. Do not repeat labels like PURPOSE, SUMMARY, NEXT STEPS, or CUSTOMER INFO. Do not mention missing information unless absolutely necessary. Make it read like a polished business summary for management."
-      },
-      {
-        role: "user",
-        content: `Write a polished executive summary based on this internal call note. Focus on what the caller wanted, what the AI handled, any likely customer intent, and whether follow-up may be needed.\n\nInternal call note:\n${body}`
-      }
-    ],
-    temperature: 0.4
-  })
-});
 
-const aiSummaryData = await aiSummaryResponse.json();
-const cleanSummary = aiSummaryData.output?.[0]?.content?.[0]?.text || body;
-const reportData = {
-  logoUrl: "https://via.placeholder.com/120x40?text=EW",
-  reportDate: new Date().toLocaleString(),
-  callerName: "Unknown Caller",
-callerPhone: "Unknown",
-callDuration: "N/A",
+        const reportSourceText = transcript.length > 0 ? transcript.join('\n') : body;
 
-  category: "General Inquiry",
-  resolutionStatus: "Follow-Up Needed",
-  urgency: "Medium",
-  sentiment: "Neutral",
+        const aiSummaryResponse = await fetch("https://api.openai.com/v1/responses", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${OPENAI_API_KEY}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            model: "gpt-4o-mini",
+            input: [
+              {
+                role: "system",
+                content: "You are an AI call analyst for a premium consumer electronics company. Write a short, clean, professional executive summary of the call in 2 to 4 sentences. Do not use markdown. Do not use bullet points. Do not repeat labels like PURPOSE, SUMMARY, NEXT STEPS, or CUSTOMER INFO. Do not mention missing information unless absolutely necessary. Make it read like a polished business summary for management."
+              },
+              {
+                role: "user",
+                content: `Write a polished executive summary based on this call record. Be specific. State what the caller needed, what the AI did, whether the issue was resolved, whether the caller requested follow-up, and whether there is any lead or sales opportunity. Do not be vague. Do not say the intent is unclear unless the transcript truly is unclear.\n\nCall record:\n${reportSourceText}`
+              }
+            ],
+            temperature: 0.4
+          })
+        });
 
-  executiveSummary: cleanSummary,
+        const aiSummaryData = await aiSummaryResponse.json();
+        const cleanSummary =
+          aiSummaryData.output?.[0]?.content?.[0]?.text ||
+          aiSummaryData.output_text ||
+          reportSourceText;
 
-  product: "N/A",
-  issue: "N/A",
-  subType: "N/A",
-  customerType: "Unknown",
-  purchaseStatus: "Unknown",
-  callContext: "General Call",
+        console.log("TRANSCRIPT DEBUG:", reportSourceText);
 
-  rootCause: "Unknown",
-  commercialValue: "Low",
-  upsellOpportunity: "Low",
-  escalationStatus: "No Escalation Needed",
+        const reportData = {
+          logoUrl: "https://via.placeholder.com/120x40?text=EW",
+          reportDate: new Date().toLocaleString(),
+          callerName: "Unknown Caller",
+          callerPhone: "Unknown",
+          callDuration: "N/A",
 
-  conversationHighlightsHtml: `<li>No structured highlights yet</li>`,
-  recommendedActionsHtml: `<li>Review call manually</li>`,
-transcriptExcerpt: transcript || "No transcript available"
-};
+          category: "General Inquiry",
+          resolutionStatus: "Follow-Up Needed",
+          urgency: "Medium",
+          sentiment: "Neutral",
 
-const htmlBody = buildCallReportHtml(reportData);
-await sendSummaryEmail(subject, body, htmlBody);
+          executiveSummary: cleanSummary,
+
+          product: "N/A",
+          issue: "N/A",
+          subType: "N/A",
+          customerType: "Unknown",
+          purchaseStatus: "Unknown",
+          callContext: "General Call",
+
+          rootCause: "Unknown",
+          commercialValue: "Low",
+          upsellOpportunity: "Low",
+          escalationStatus: "No Escalation Needed",
+
+          conversationHighlightsHtml: `<li>No structured highlights yet</li>`,
+          recommendedActionsHtml: `<li>Review call manually</li>`,
+          transcriptExcerpt: reportSourceText || "No transcript available"
+        };
+
+        const htmlBody = buildCallReportHtml(reportData);
+        await sendSummaryEmail(subject, body, htmlBody);
         console.log('✅ Summary email sent.');
-    } catch (err) {
+      } catch (err) {
         console.error('❌ Summary email failed:', err);
-    } finally {
+      } finally {
         console.log('Client disconnected.');
-    }
-});
-
-        // Handle WebSocket close and errors
-        openAiWs.on('close', () => {
-            console.log('Disconnected from the OpenAI Realtime API');
-        });
-
-        openAiWs.on('error', (error) => {
-            console.error('Error in the OpenAI WebSocket:', error);
-        });
+      }
     });
+
+    openAiWs.on('close', () => {
+      console.log('Disconnected from the OpenAI Realtime API');
+    });
+
+    openAiWs.on('error', (error) => {
+      console.error('Error in the OpenAI WebSocket:', error);
+    });
+  });
 });
 
 const start = async () => {
   try {
     await fastify.listen({
-      port: process.env.PORT || 5050,
+      port: PORT,
       host: '0.0.0.0'
     });
 
