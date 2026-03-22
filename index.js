@@ -337,6 +337,26 @@ function normalizeList(value, fallback = []) {
     .filter(Boolean);
 }
 
+function normalizeText(value, fallback = 'Unknown') {
+  const text = String(value || '').trim();
+  if (!text) return fallback;
+  return text;
+}
+
+function isUnknownLike(value) {
+  const text = String(value || '').trim().toLowerCase();
+  return (
+    !text ||
+    text === 'unknown' ||
+    text === 'unknown caller' ||
+    text === 'not captured' ||
+    text === 'n/a' ||
+    text === 'none' ||
+    text === 'not provided' ||
+    text === 'not available'
+  );
+}
+
 function safeJsonParse(text) {
   try {
     if (!text) return null;
@@ -390,10 +410,17 @@ function buildTranscriptHtml(transcriptLines) {
         text = line.replace(/^AI:\s*/, '');
       }
 
+      const speakerBg = isCaller ? '#f3f4f6' : '#eef6ea';
+      const speakerColor = isCaller ? '#111827' : '#528238';
+
       return `
-        <div style="margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #f3f4f6;">
-          <div style="font-size: 12px; font-weight: 700; color: ${isCaller ? '#111827' : '#528238'}; margin-bottom: 4px;">${escapeHtml(speaker)}</div>
-          <div style="font-size: 14px; line-height: 1.7; color: #374151;">${escapeHtml(text)}</div>
+        <div style="margin-bottom: 12px; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden;">
+          <div style="padding: 8px 12px; background-color: ${speakerBg}; font-size: 12px; font-weight: 700; color: ${speakerColor};">
+            ${escapeHtml(speaker)}
+          </div>
+          <div style="padding: 12px; font-size: 14px; line-height: 1.7; color: #374151;">
+            ${escapeHtml(text)}
+          </div>
         </div>
       `;
     })
@@ -656,6 +683,160 @@ async function transcribeAudioBuffer(audioBuffer) {
   return data.text || '';
 }
 
+async function formatTranscriptAsDialogue(rawTranscriptText) {
+  if (!rawTranscriptText || !rawTranscriptText.trim()) {
+    return [];
+  }
+
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      temperature: 0.1,
+      input: [
+        {
+          role: 'system',
+          content: `
+You are cleaning up a phone call transcript for an internal business report.
+
+Your job:
+- Convert the raw transcript into a readable dialogue.
+- Use only these speaker labels:
+  "Caller:"
+  "AI:"
+- Break the conversation into short dialogue lines.
+- Keep the original meaning accurate.
+- Do not invent details that are not supported by the transcript.
+- If speaker attribution is unclear, make the best reasonable judgment from the conversation context.
+- Return ONLY valid JSON.
+- Return this exact format:
+{
+  "dialogueLines": [
+    "Caller: ...",
+    "AI: ..."
+  ]
+}
+          `.trim()
+        },
+        {
+          role: 'user',
+          content: `Raw transcript:\n${rawTranscriptText}`
+        }
+      ]
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Dialogue formatting failed: ${response.status} ${errorText}`);
+  }
+
+  const result = await response.json();
+  const outputText =
+    result.output_text ||
+    result.output?.[0]?.content?.[0]?.text ||
+    '';
+
+  const parsed = safeJsonParse(outputText);
+
+  if (!parsed || !Array.isArray(parsed.dialogueLines)) {
+    throw new Error(`Could not parse dialogue JSON. Raw output: ${outputText}`);
+  }
+
+  return parsed.dialogueLines
+    .map(line => String(line || '').trim())
+    .filter(Boolean);
+}
+
+function applyAnalysisPolish(analysis, callerPhone) {
+  const polished = { ...analysis };
+
+  polished.callerName = isUnknownLike(polished.callerName) ? 'Unknown Caller' : normalizeText(polished.callerName);
+  polished.email = isUnknownLike(polished.email) ? 'Not captured' : normalizeText(polished.email);
+  polished.businessName = isUnknownLike(polished.businessName) ? 'Not captured' : normalizeText(polished.businessName);
+
+  polished.category = normalizeText(polished.category, 'General Inquiry');
+  polished.resolutionStatus = normalizeText(polished.resolutionStatus, 'Unknown');
+  polished.urgency = normalizeText(polished.urgency, 'Medium');
+  polished.sentiment = normalizeText(polished.sentiment, 'Neutral');
+
+  polished.followUpNeeded = normalizeText(polished.followUpNeeded, 'Unknown');
+  polished.escalationNeeded = normalizeText(polished.escalationNeeded, 'Unknown');
+  polished.leadOpportunity = normalizeText(polished.leadOpportunity, 'None');
+
+  polished.product = isUnknownLike(polished.product) ? 'Unknown' : normalizeText(polished.product);
+  polished.issue = isUnknownLike(polished.issue) ? 'Unknown' : normalizeText(polished.issue);
+  polished.subType = isUnknownLike(polished.subType) ? 'Unknown' : normalizeText(polished.subType);
+  polished.customerType = isUnknownLike(polished.customerType) ? 'Unknown' : normalizeText(polished.customerType);
+  polished.purchaseStatus = isUnknownLike(polished.purchaseStatus) ? 'Unknown' : normalizeText(polished.purchaseStatus);
+  polished.callContext = isUnknownLike(polished.callContext) ? 'Unknown' : normalizeText(polished.callContext);
+
+  polished.rootCause = isUnknownLike(polished.rootCause) ? 'Unknown' : normalizeText(polished.rootCause);
+  polished.commercialValue = isUnknownLike(polished.commercialValue) ? 'Low' : normalizeText(polished.commercialValue);
+  polished.upsellOpportunity = isUnknownLike(polished.upsellOpportunity) ? 'Low' : normalizeText(polished.upsellOpportunity);
+  polished.escalationStatus = isUnknownLike(polished.escalationStatus)
+    ? (polished.escalationNeeded === 'Yes' ? 'Escalation Needed' : 'No Escalation Needed')
+    : normalizeText(polished.escalationStatus);
+
+  polished.conversationHighlights = normalizeList(polished.conversationHighlights);
+  polished.recommendedActions = normalizeList(polished.recommendedActions);
+
+  if (polished.resolutionStatus === 'Resolved') {
+    polished.followUpNeeded = 'No';
+    if (!polished.outcomeNotes || isUnknownLike(polished.outcomeNotes)) {
+      polished.outcomeNotes = 'The caller’s issue was resolved during the call.';
+    }
+    if (polished.recommendedActions.length === 0) {
+      polished.recommendedActions = ['No additional follow-up is required.'];
+    }
+  }
+
+  if (polished.category === 'Tech Support / Troubleshooting') {
+    if (isUnknownLike(polished.callContext)) {
+      polished.callContext = 'Product support assistance';
+    }
+    if (polished.recommendedActions.length === 0 && polished.resolutionStatus !== 'Resolved') {
+      polished.recommendedActions = ['Review the troubleshooting steps and follow up if the issue continues.'];
+    }
+  }
+
+  if (polished.category === 'Wholesale / Dealer Inquiry') {
+    if (isUnknownLike(polished.customerType)) {
+      polished.customerType = 'Business / Dealer Prospect';
+    }
+    if (polished.leadOpportunity === 'None') {
+      polished.leadOpportunity = 'Possible';
+    }
+    if (polished.recommendedActions.length === 0) {
+      polished.recommendedActions = ['Have the sales or account team follow up with the caller.'];
+    }
+  }
+
+  if (polished.category === 'Warranty / Returns') {
+    if (polished.recommendedActions.length === 0) {
+      polished.recommendedActions = ['Review warranty eligibility and follow up with next steps.'];
+    }
+  }
+
+  if (polished.category === 'Complaint / Escalation' && polished.escalationNeeded !== 'Yes') {
+    polished.escalationNeeded = 'Yes';
+    polished.escalationStatus = 'Escalation Needed';
+  }
+
+  if ((!polished.callerPhone || isUnknownLike(polished.callerPhone)) && callerPhone) {
+    polished.callerPhone = callerPhone;
+  }
+
+  polished.executiveSummary = normalizeText(polished.executiveSummary, 'No summary available.');
+  polished.outcomeNotes = normalizeText(polished.outcomeNotes, 'No outcome notes available.');
+
+  return polished;
+}
+
 async function analyzeCallWithOpenAI({ transcriptLines, callerPhone, durationText, reportDate }) {
   const transcriptText =
     transcriptLines.length > 0
@@ -682,6 +863,7 @@ Your job is to analyze a phone call transcript and return ONLY valid JSON.
 Important rules:
 - Do not guess facts that are not supported by the transcript.
 - If something is not stated, use "Unknown" or "Not captured".
+- Extract caller identity details if they are actually stated in the transcript.
 - If the issue was solved during the call, resolutionStatus must say "Resolved".
 - If the issue was not solved and a callback or team follow-up is needed, resolutionStatus must say "Follow-Up Needed".
 - If the caller was angry or demanded escalation, escalationNeeded should be "Yes".
@@ -707,6 +889,9 @@ Important rules:
   "Low", "Medium", "High"
 - leadOpportunity must be one of:
   "None", "Possible", "Strong"
+- For tech support calls, identify the product, device/setup context, specific issue, and whether it was fixed.
+- For wholesale/dealer calls, identify business/lead details, product interest, and follow-up importance.
+- For warranty/returns calls, identify the issue, purchase context, and required next steps.
 
 Return JSON with exactly these keys:
 {
@@ -834,9 +1019,16 @@ fastify.post('/recording-status', async (request, reply) => {
     const audioBuffer = await downloadTwilioRecording(wavUrl);
 
     const transcriptText = await transcribeAudioBuffer(audioBuffer);
-    const transcriptLines = transcriptText
-      ? transcriptText.split(/\n+/).map(line => line.trim()).filter(Boolean)
-      : ['No transcript available.'];
+
+    let transcriptLines = ['No transcript available.'];
+    if (transcriptText && transcriptText.trim()) {
+      try {
+        transcriptLines = await formatTranscriptAsDialogue(transcriptText);
+      } catch (dialogueError) {
+        console.error('❌ Dialogue formatting failed:', dialogueError);
+        transcriptLines = [transcriptText];
+      }
+    }
 
     console.log('RECORDING TRANSCRIPT DEBUG:');
     console.log(transcriptLines.join('\n'));
@@ -884,41 +1076,43 @@ fastify.post('/recording-status', async (request, reply) => {
       };
     }
 
+    const polishedAnalysis = applyAnalysisPolish(analysis, callerPhone);
+
     const reportData = {
-      logoUrl: 'https://via.placeholder.com/120x40?text=EW',
+      logoUrl: process.env.REPORT_LOGO_URL || 'https://via.placeholder.com/120x40?text=EW',
       reportDate,
-      callerName: analysis.callerName || 'Unknown Caller',
+      callerName: polishedAnalysis.callerName || 'Unknown Caller',
       callerPhone: callerPhone || 'Unknown',
       callDuration: durationText,
 
-      category: analysis.category || 'General Inquiry',
-      resolutionStatus: analysis.resolutionStatus || 'Unknown',
-      urgency: analysis.urgency || 'Medium',
-      sentiment: analysis.sentiment || 'Neutral',
+      category: polishedAnalysis.category || 'General Inquiry',
+      resolutionStatus: polishedAnalysis.resolutionStatus || 'Unknown',
+      urgency: polishedAnalysis.urgency || 'Medium',
+      sentiment: polishedAnalysis.sentiment || 'Neutral',
 
-      executiveSummary: analysis.executiveSummary || 'No summary available.',
+      executiveSummary: polishedAnalysis.executiveSummary || 'No summary available.',
 
-      followUpNeeded: analysis.followUpNeeded || 'Unknown',
-      escalationNeeded: analysis.escalationNeeded || 'Unknown',
-      leadOpportunity: analysis.leadOpportunity || 'None',
-      outcomeNotes: analysis.outcomeNotes || 'No outcome notes available.',
+      followUpNeeded: polishedAnalysis.followUpNeeded || 'Unknown',
+      escalationNeeded: polishedAnalysis.escalationNeeded || 'Unknown',
+      leadOpportunity: polishedAnalysis.leadOpportunity || 'None',
+      outcomeNotes: polishedAnalysis.outcomeNotes || 'No outcome notes available.',
 
-      email: analysis.email || 'Not captured',
-      businessName: analysis.businessName || 'Not captured',
-      product: analysis.product || 'Unknown',
-      issue: analysis.issue || 'Unknown',
-      subType: analysis.subType || 'Unknown',
-      customerType: analysis.customerType || 'Unknown',
-      purchaseStatus: analysis.purchaseStatus || 'Unknown',
-      callContext: analysis.callContext || 'Unknown',
+      email: polishedAnalysis.email || 'Not captured',
+      businessName: polishedAnalysis.businessName || 'Not captured',
+      product: polishedAnalysis.product || 'Unknown',
+      issue: polishedAnalysis.issue || 'Unknown',
+      subType: polishedAnalysis.subType || 'Unknown',
+      customerType: polishedAnalysis.customerType || 'Unknown',
+      purchaseStatus: polishedAnalysis.purchaseStatus || 'Unknown',
+      callContext: polishedAnalysis.callContext || 'Unknown',
 
-      rootCause: analysis.rootCause || 'Unknown',
-      commercialValue: analysis.commercialValue || 'Unknown',
-      upsellOpportunity: analysis.upsellOpportunity || 'Unknown',
-      escalationStatus: analysis.escalationStatus || 'Unknown',
+      rootCause: polishedAnalysis.rootCause || 'Unknown',
+      commercialValue: polishedAnalysis.commercialValue || 'Low',
+      upsellOpportunity: polishedAnalysis.upsellOpportunity || 'Low',
+      escalationStatus: polishedAnalysis.escalationStatus || 'No Escalation Needed',
 
-      conversationHighlights: analysis.conversationHighlights || [],
-      recommendedActions: analysis.recommendedActions || [],
+      conversationHighlights: polishedAnalysis.conversationHighlights || [],
+      recommendedActions: polishedAnalysis.recommendedActions || [],
       transcriptLines
     };
 
