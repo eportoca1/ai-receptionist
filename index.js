@@ -791,9 +791,7 @@ fastify.register(async (fastifyInstance) => {
           type: 'realtime',
           model: 'gpt-realtime',
           output_modalities: ['audio'],
-          input_audio_transcription: {
-            model: 'gpt-4o-mini-transcribe'
-          },
+
           audio: {
             input: {
               format: { type: 'audio/pcmu' },
