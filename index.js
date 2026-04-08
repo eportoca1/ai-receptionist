@@ -1443,10 +1443,9 @@ fastify.register(async (fastifyInstance) => {
 
         const responseCreate = {
           type: 'response.create',
-          response: {
-            modalities: ['audio'],
-            instructions: buildResponseInstructions(knowledge)
-          }
+response: {
+  instructions: buildResponseInstructions(knowledge)
+}
         };
 
         openAiWs.send(JSON.stringify(responseCreate));
@@ -1455,10 +1454,9 @@ fastify.register(async (fastifyInstance) => {
 
         const fallbackResponse = {
           type: 'response.create',
-          response: {
-            modalities: ['audio'],
-            instructions: buildResponseInstructions('')
-          }
+response: {
+  instructions: buildResponseInstructions('')
+}
         };
 
         openAiWs.send(JSON.stringify(fallbackResponse));
