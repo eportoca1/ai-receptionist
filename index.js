@@ -513,9 +513,28 @@ async function getRelevantKnowledge(query) {
     .filter((item) => Number(item.similarity || 0) >= KNOWLEDGE_SIMILARITY_THRESHOLD)
     .slice(0, KNOWLEDGE_MAX_SNIPPETS);
 
-  if (filtered.length === 0) {
+if (filtered.length === 0) {
+  console.log('⚠️ No embedding results, trying keyword fallback...');
+
+  const { data: fallbackData, error: fallbackError } = await supabase
+    .from('documents')
+    .select('content')
+    .ilike('content', `%${cleanedQuery}%`)
+    .limit(5);
+
+  if (fallbackError) {
+    console.error('Fallback search error:', fallbackError);
     return '';
   }
+
+  if (!fallbackData || fallbackData.length === 0) {
+    return '';
+  }
+
+  return fallbackData
+    .map(item => item.content)
+    .join('\n\n');
+}
 
   return filtered
     .map((item) => String(item.content || '').trim())
