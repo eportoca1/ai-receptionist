@@ -462,6 +462,55 @@ function shouldUseKnowledgeRetrieval(text, supportMode = false) {
   return false;
 }
 
+
+function normalizeForProductMatch(text = '') {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractProductCandidates(userText = '') {
+  const original = String(userText || '').trim();
+  if (!original) return [];
+
+  const candidates = new Set();
+
+  const cleaned = original
+    .replace(/\?/g, ' ')
+    .replace(/\./g, ' ')
+    .replace(/,/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const patterns = [
+    /called\s+(.+)$/i,
+    /with\s+the\s+(.+)$/i,
+    /with\s+my\s+(.+)$/i,
+    /about\s+the\s+(.+)$/i,
+    /about\s+my\s+(.+)$/i,
+    /help with\s+(.+)$/i,
+    /familiar with\s+(.+)$/i
+  ];
+
+  for (const pattern of patterns) {
+    const match = cleaned.match(pattern);
+    if (match && match[1]) {
+      let value = match[1]
+        .replace(/^(the|a|an)\s+/i, '')
+        .trim();
+
+      if (value) {
+        candidates.add(value);
+      }
+    }
+  }
+
+  return Array.from(candidates);
+}
+
+
 async function createEmbedding(input) {
   const response = await fetch('https://api.openai.com/v1/embeddings', {
     method: 'POST',
@@ -516,23 +565,42 @@ async function getRelevantKnowledge(query) {
 if (filtered.length === 0) {
   console.log('⚠️ No embedding results, trying keyword fallback...');
 
-  const { data: fallbackData, error: fallbackError } = await supabase
+  const productCandidates = extractProductCandidates(cleanedQuery);
+  console.log('PRODUCT CANDIDATES:', productCandidates);
+
+  const { data: fallbackRows, error: fallbackError } = await supabase
     .from('documents')
     .select('content')
-    .ilike('content', `%${cleanedQuery}%`)
-    .limit(5);
+    .eq('client_id', KNOWLEDGE_CLIENT_ID)
+    .limit(300);
 
   if (fallbackError) {
     console.error('Fallback search error:', fallbackError);
     return '';
   }
 
-  if (!fallbackData || fallbackData.length === 0) {
+  if (!fallbackRows || fallbackRows.length === 0) {
     return '';
   }
 
-  return fallbackData
-    .map(item => item.content)
+  const matchedRows = fallbackRows.filter((row) => {
+    const content = normalizeForProductMatch(row.content || '');
+
+    return productCandidates.some((candidate) => {
+      const normalizedCandidate = normalizeForProductMatch(candidate);
+      if (!normalizedCandidate) return false;
+
+      return content.includes(normalizedCandidate);
+    });
+  });
+
+  if (matchedRows.length === 0) {
+    return '';
+  }
+
+  return matchedRows
+    .slice(0, KNOWLEDGE_MAX_SNIPPETS)
+    .map((item) => item.content)
     .join('\n\n');
 }
 
