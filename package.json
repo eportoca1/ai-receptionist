@@ -13,9 +13,12 @@
   "dependencies": {
     "@fastify/formbody": "^8.0.0",
     "@fastify/websocket": "^11.0.0",
-    "dotenv": "^16.4.5",
+    "@supabase/supabase-js": "^2.102.1",
+    "dotenv": "^16.6.1",
     "fastify": "^5.0.0",
     "nodemailer": "^8.0.1",
+    "openai": "^6.33.0",
+    "pdf-parse": "^1.1.1",
     "ws": "^8.18.0"
   }
 }

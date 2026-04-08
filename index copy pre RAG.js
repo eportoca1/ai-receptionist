@@ -5,17 +5,32 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import fastifyFormBody from '@fastify/formbody';
 import fastifyWs from '@fastify/websocket';
+import { createClient } from '@supabase/supabase-js';
 
 // Load environment variables from .env file
 dotenv.config();
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
-// Retrieve the OpenAI API key from environment variables.
-const { OPENAI_API_KEY } = process.env;
+// Retrieve environment variables
+const {
+  OPENAI_API_KEY,
+  TWILIO_ACCOUNT_SID,
+  TWILIO_AUTH_TOKEN
+} = process.env;
 
 if (!OPENAI_API_KEY) {
   console.error('Missing OpenAI API key. Please set it in the .env file.');
   process.exit(1);
 }
+
+if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
+  console.error('Missing Twilio credentials. Please set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN.');
+  process.exit(1);
+}
+
 
 // Initialize Fastify
 const fastify = Fastify();
@@ -284,6 +299,7 @@ try {
 const VOICE = 'marin';
 const TEMPERATURE = 0.92;
 const PORT = process.env.PORT || 5050;
+const callContextStore = new Map();
 
 // List of Event Types to log to the console.
 const LOG_EVENT_TYPES = [
@@ -325,6 +341,26 @@ function normalizeList(value, fallback = []) {
   return value
     .map((item) => String(item || '').trim())
     .filter(Boolean);
+}
+
+function normalizeText(value, fallback = 'Unknown') {
+  const text = String(value || '').trim();
+  if (!text) return fallback;
+  return text;
+}
+
+function isUnknownLike(value) {
+  const text = String(value || '').trim().toLowerCase();
+  return (
+    !text ||
+    text === 'unknown' ||
+    text === 'unknown caller' ||
+    text === 'not captured' ||
+    text === 'n/a' ||
+    text === 'none' ||
+    text === 'not provided' ||
+    text === 'not available'
+  );
 }
 
 function safeJsonParse(text) {
@@ -380,10 +416,17 @@ function buildTranscriptHtml(transcriptLines) {
         text = line.replace(/^AI:\s*/, '');
       }
 
+      const speakerBg = isCaller ? '#f3f4f6' : '#eef6ea';
+      const speakerColor = isCaller ? '#111827' : '#528238';
+
       return `
-        <div style="margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #f3f4f6;">
-          <div style="font-size: 12px; font-weight: 700; color: ${isCaller ? '#111827' : '#528238'}; margin-bottom: 4px;">${escapeHtml(speaker)}</div>
-          <div style="font-size: 14px; line-height: 1.7; color: #374151;">${escapeHtml(text)}</div>
+        <div style="margin-bottom: 12px; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden;">
+          <div style="padding: 8px 12px; background-color: ${speakerBg}; font-size: 12px; font-weight: 700; color: ${speakerColor};">
+            ${escapeHtml(speaker)}
+          </div>
+          <div style="padding: 12px; font-size: 14px; line-height: 1.7; color: #374151;">
+            ${escapeHtml(text)}
+          </div>
         </div>
       `;
     })
@@ -607,6 +650,199 @@ async function sendSummaryEmail(subject, body, htmlBody = null) {
   });
 }
 
+async function downloadTwilioRecording(recordingUrl) {
+  const authString = Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString('base64');
+
+  const response = await fetch(recordingUrl, {
+    headers: {
+      Authorization: `Basic ${authString}`
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Twilio recording download failed: ${response.status} ${response.statusText}`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}
+
+async function transcribeAudioBuffer(audioBuffer) {
+  const form = new FormData();
+  form.append('file', new Blob([audioBuffer]), 'call.wav');
+  form.append('model', 'gpt-4o-mini-transcribe');
+
+  const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${OPENAI_API_KEY}`
+    },
+    body: form
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenAI transcription failed: ${response.status} ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data.text || '';
+}
+
+async function formatTranscriptAsDialogue(rawTranscriptText) {
+  if (!rawTranscriptText || !rawTranscriptText.trim()) {
+    return [];
+  }
+
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      temperature: 0.1,
+      input: [
+        {
+          role: 'system',
+          content: `
+You are cleaning up a phone call transcript for an internal business report.
+
+Your job:
+- Convert the raw transcript into a readable dialogue.
+- Use only these speaker labels:
+  "Caller:"
+  "AI:"
+- Break the conversation into short dialogue lines.
+- Keep the original meaning accurate.
+- Do not invent details that are not supported by the transcript.
+- If speaker attribution is unclear, make the best reasonable judgment from the conversation context.
+- Return ONLY valid JSON.
+- Return this exact format:
+{
+  "dialogueLines": [
+    "Caller: ...",
+    "AI: ..."
+  ]
+}
+          `.trim()
+        },
+        {
+          role: 'user',
+          content: `Raw transcript:\n${rawTranscriptText}`
+        }
+      ]
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Dialogue formatting failed: ${response.status} ${errorText}`);
+  }
+
+  const result = await response.json();
+  const outputText =
+    result.output_text ||
+    result.output?.[0]?.content?.[0]?.text ||
+    '';
+
+  const parsed = safeJsonParse(outputText);
+
+  if (!parsed || !Array.isArray(parsed.dialogueLines)) {
+    throw new Error(`Could not parse dialogue JSON. Raw output: ${outputText}`);
+  }
+
+  return parsed.dialogueLines
+    .map(line => String(line || '').trim())
+    .filter(Boolean);
+}
+
+function applyAnalysisPolish(analysis, callerPhone) {
+  const polished = { ...analysis };
+
+  polished.callerName = isUnknownLike(polished.callerName) ? 'Unknown Caller' : normalizeText(polished.callerName);
+  polished.email = isUnknownLike(polished.email) ? 'Not captured' : normalizeText(polished.email);
+  polished.businessName = isUnknownLike(polished.businessName) ? 'Not captured' : normalizeText(polished.businessName);
+
+  polished.category = normalizeText(polished.category, 'General Inquiry');
+  polished.resolutionStatus = normalizeText(polished.resolutionStatus, 'Unknown');
+  polished.urgency = normalizeText(polished.urgency, 'Medium');
+  polished.sentiment = normalizeText(polished.sentiment, 'Neutral');
+
+  polished.followUpNeeded = normalizeText(polished.followUpNeeded, 'Unknown');
+  polished.escalationNeeded = normalizeText(polished.escalationNeeded, 'Unknown');
+  polished.leadOpportunity = normalizeText(polished.leadOpportunity, 'None');
+
+  polished.product = isUnknownLike(polished.product) ? 'Unknown' : normalizeText(polished.product);
+  polished.issue = isUnknownLike(polished.issue) ? 'Unknown' : normalizeText(polished.issue);
+  polished.subType = isUnknownLike(polished.subType) ? 'Unknown' : normalizeText(polished.subType);
+  polished.customerType = isUnknownLike(polished.customerType) ? 'Unknown' : normalizeText(polished.customerType);
+  polished.purchaseStatus = isUnknownLike(polished.purchaseStatus) ? 'Unknown' : normalizeText(polished.purchaseStatus);
+  polished.callContext = isUnknownLike(polished.callContext) ? 'Unknown' : normalizeText(polished.callContext);
+
+  polished.rootCause = isUnknownLike(polished.rootCause) ? 'Unknown' : normalizeText(polished.rootCause);
+  polished.commercialValue = isUnknownLike(polished.commercialValue) ? 'Low' : normalizeText(polished.commercialValue);
+  polished.upsellOpportunity = isUnknownLike(polished.upsellOpportunity) ? 'Low' : normalizeText(polished.upsellOpportunity);
+  polished.escalationStatus = isUnknownLike(polished.escalationStatus)
+    ? (polished.escalationNeeded === 'Yes' ? 'Escalation Needed' : 'No Escalation Needed')
+    : normalizeText(polished.escalationStatus);
+
+  polished.conversationHighlights = normalizeList(polished.conversationHighlights);
+  polished.recommendedActions = normalizeList(polished.recommendedActions);
+
+  if (polished.resolutionStatus === 'Resolved') {
+    polished.followUpNeeded = 'No';
+    if (!polished.outcomeNotes || isUnknownLike(polished.outcomeNotes)) {
+      polished.outcomeNotes = 'The caller’s issue was resolved during the call.';
+    }
+    if (polished.recommendedActions.length === 0) {
+      polished.recommendedActions = ['No additional follow-up is required.'];
+    }
+  }
+
+  if (polished.category === 'Tech Support / Troubleshooting') {
+    if (isUnknownLike(polished.callContext)) {
+      polished.callContext = 'Product support assistance';
+    }
+    if (polished.recommendedActions.length === 0 && polished.resolutionStatus !== 'Resolved') {
+      polished.recommendedActions = ['Review the troubleshooting steps and follow up if the issue continues.'];
+    }
+  }
+
+  if (polished.category === 'Wholesale / Dealer Inquiry') {
+    if (isUnknownLike(polished.customerType)) {
+      polished.customerType = 'Business / Dealer Prospect';
+    }
+    if (polished.leadOpportunity === 'None') {
+      polished.leadOpportunity = 'Possible';
+    }
+    if (polished.recommendedActions.length === 0) {
+      polished.recommendedActions = ['Have the sales or account team follow up with the caller.'];
+    }
+  }
+
+  if (polished.category === 'Warranty / Returns') {
+    if (polished.recommendedActions.length === 0) {
+      polished.recommendedActions = ['Review warranty eligibility and follow up with next steps.'];
+    }
+  }
+
+  if (polished.category === 'Complaint / Escalation' && polished.escalationNeeded !== 'Yes') {
+    polished.escalationNeeded = 'Yes';
+    polished.escalationStatus = 'Escalation Needed';
+  }
+
+  if ((!polished.callerPhone || isUnknownLike(polished.callerPhone)) && callerPhone) {
+    polished.callerPhone = callerPhone;
+  }
+
+  polished.executiveSummary = normalizeText(polished.executiveSummary, 'No summary available.');
+  polished.outcomeNotes = normalizeText(polished.outcomeNotes, 'No outcome notes available.');
+
+  return polished;
+}
+
 async function analyzeCallWithOpenAI({ transcriptLines, callerPhone, durationText, reportDate }) {
   const transcriptText =
     transcriptLines.length > 0
@@ -633,6 +869,7 @@ Your job is to analyze a phone call transcript and return ONLY valid JSON.
 Important rules:
 - Do not guess facts that are not supported by the transcript.
 - If something is not stated, use "Unknown" or "Not captured".
+- Extract caller identity details if they are actually stated in the transcript.
 - If the issue was solved during the call, resolutionStatus must say "Resolved".
 - If the issue was not solved and a callback or team follow-up is needed, resolutionStatus must say "Follow-Up Needed".
 - If the caller was angry or demanded escalation, escalationNeeded should be "Yes".
@@ -658,6 +895,9 @@ Important rules:
   "Low", "Medium", "High"
 - leadOpportunity must be one of:
   "None", "Possible", "Strong"
+- For tech support calls, identify the product, device/setup context, specific issue, and whether it was fixed.
+- For wholesale/dealer calls, identify business/lead details, product interest, and follow-up importance.
+- For warranty/returns calls, identify the issue, purchase context, and required next steps.
 
 Return JSON with exactly these keys:
 {
@@ -728,6 +968,11 @@ fastify.all('/incoming-call', async (request, reply) => {
   const callerPhone = request.body?.From || request.query?.From || 'Unknown';
   const callSid = request.body?.CallSid || request.query?.CallSid || 'Unknown';
 
+  callContextStore.set(callSid, {
+    callerPhone,
+    startedAt: Date.now()
+  });
+
   const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Start>
@@ -754,12 +999,180 @@ fastify.all('/incoming-call', async (request, reply) => {
 
 // Recording status webhook
 fastify.post('/recording-status', async (request, reply) => {
-  console.log('📼 Recording callback received');
-  console.log('CallSid:', request.body.CallSid);
-  console.log('RecordingSid:', request.body.RecordingSid);
-  console.log('RecordingUrl:', request.body.RecordingUrl);
-
   reply.send({ ok: true });
+
+  try {
+    console.log('📼 Recording callback received');
+    console.log('CallSid:', request.body.CallSid);
+    console.log('RecordingSid:', request.body.RecordingSid);
+    console.log('RecordingUrl:', request.body.RecordingUrl);
+    console.log('RecordingDuration:', request.body.RecordingDuration);
+
+    const callSid = request.body.CallSid || 'Unknown';
+    const recordingUrlBase = request.body.RecordingUrl;
+
+    if (!recordingUrlBase) {
+      throw new Error('Missing RecordingUrl in callback.');
+    }
+
+    const storedContext = callContextStore.get(callSid) || {};
+    const callerPhone = storedContext.callerPhone || 'Unknown';
+    const durationSeconds = Number(request.body.RecordingDuration || 0);
+    const durationText = formatDurationFromSeconds(durationSeconds);
+    const reportDate = new Date().toLocaleString();
+
+    const wavUrl = `${recordingUrlBase}.wav`;
+    const audioBuffer = await downloadTwilioRecording(wavUrl);
+
+    const transcriptText = await transcribeAudioBuffer(audioBuffer);
+
+    let transcriptLines = ['No transcript available.'];
+    if (transcriptText && transcriptText.trim()) {
+      try {
+        transcriptLines = await formatTranscriptAsDialogue(transcriptText);
+      } catch (dialogueError) {
+        console.error('❌ Dialogue formatting failed:', dialogueError);
+        transcriptLines = [transcriptText];
+      }
+    }
+
+    console.log('RECORDING TRANSCRIPT DEBUG:');
+    console.log(transcriptLines.join('\n'));
+
+    let analysis;
+    try {
+      analysis = await analyzeCallWithOpenAI({
+        transcriptLines,
+        callerPhone,
+        durationText,
+        reportDate
+      });
+    } catch (analysisError) {
+      console.error('❌ Structured call analysis failed:', analysisError);
+
+      analysis = {
+        callerName: 'Unknown Caller',
+        email: 'Not captured',
+        businessName: 'Not captured',
+        category: 'General Inquiry',
+        resolutionStatus: 'Unknown',
+        urgency: 'Medium',
+        sentiment: 'Neutral',
+        executiveSummary: transcriptText
+          ? 'A call was completed and transcribed from the Twilio recording, but the structured analysis could not be fully generated. Please review the transcript below.'
+          : 'No information is available from the call transcript.',
+        followUpNeeded: 'Unknown',
+        escalationNeeded: 'Unknown',
+        leadOpportunity: 'None',
+        outcomeNotes: transcriptText
+          ? 'Structured analysis failed, so the transcript should be reviewed manually.'
+          : 'The call could not be assessed due to lack of transcript.',
+        product: 'Unknown',
+        issue: 'Unknown',
+        subType: 'Unknown',
+        customerType: 'Unknown',
+        purchaseStatus: 'Unknown',
+        callContext: 'Unknown',
+        rootCause: 'Unknown',
+        commercialValue: 'Unknown',
+        upsellOpportunity: 'Unknown',
+        escalationStatus: 'Unknown',
+        conversationHighlights: transcriptText ? ['Transcript captured from Twilio recording.'] : ['No highlights captured.'],
+        recommendedActions: transcriptText ? ['Review transcript manually if needed.'] : ['No recommended actions.']
+      };
+    }
+
+    const polishedAnalysis = applyAnalysisPolish(analysis, callerPhone);
+
+    const reportData = {
+logoUrl: process.env.REPORT_LOGO_URL || 'https://i.imgur.com/eYFsbtR.png',
+      reportDate,
+      callerName: polishedAnalysis.callerName || 'Unknown Caller',
+      callerPhone: callerPhone || 'Unknown',
+      callDuration: durationText,
+
+      category: polishedAnalysis.category || 'General Inquiry',
+      resolutionStatus: polishedAnalysis.resolutionStatus || 'Unknown',
+      urgency: polishedAnalysis.urgency || 'Medium',
+      sentiment: polishedAnalysis.sentiment || 'Neutral',
+
+      executiveSummary: polishedAnalysis.executiveSummary || 'No summary available.',
+
+      followUpNeeded: polishedAnalysis.followUpNeeded || 'Unknown',
+      escalationNeeded: polishedAnalysis.escalationNeeded || 'Unknown',
+      leadOpportunity: polishedAnalysis.leadOpportunity || 'None',
+      outcomeNotes: polishedAnalysis.outcomeNotes || 'No outcome notes available.',
+
+      email: polishedAnalysis.email || 'Not captured',
+      businessName: polishedAnalysis.businessName || 'Not captured',
+      product: polishedAnalysis.product || 'Unknown',
+      issue: polishedAnalysis.issue || 'Unknown',
+      subType: polishedAnalysis.subType || 'Unknown',
+      customerType: polishedAnalysis.customerType || 'Unknown',
+      purchaseStatus: polishedAnalysis.purchaseStatus || 'Unknown',
+      callContext: polishedAnalysis.callContext || 'Unknown',
+
+      rootCause: polishedAnalysis.rootCause || 'Unknown',
+      commercialValue: polishedAnalysis.commercialValue || 'Low',
+      upsellOpportunity: polishedAnalysis.upsellOpportunity || 'Low',
+      escalationStatus: polishedAnalysis.escalationStatus || 'No Escalation Needed',
+
+      conversationHighlights: polishedAnalysis.conversationHighlights || [],
+      recommendedActions: polishedAnalysis.recommendedActions || [],
+      transcriptLines
+    };
+
+    const subject = `[EW AI CALL SUMMARY] ${reportDate} | ${reportData.category} | ${reportData.resolutionStatus}`;
+
+    const plainTextBody = `
+Electronic World - Call Intelligence Report
+
+Date: ${reportDate}
+Caller Name: ${reportData.callerName}
+Caller Phone: ${reportData.callerPhone}
+Call Duration: ${reportData.callDuration}
+Category: ${reportData.category}
+Resolution: ${reportData.resolutionStatus}
+Urgency: ${reportData.urgency}
+Sentiment: ${reportData.sentiment}
+
+Executive Summary:
+${reportData.executiveSummary}
+
+Call Outcome:
+- Follow-Up Needed: ${reportData.followUpNeeded}
+- Escalation Needed: ${reportData.escalationNeeded}
+- Lead Opportunity: ${reportData.leadOpportunity}
+- Outcome Notes: ${reportData.outcomeNotes}
+
+Key Business Details:
+- Email: ${reportData.email}
+- Business Name: ${reportData.businessName}
+- Product: ${reportData.product}
+- Issue: ${reportData.issue}
+- Sub-Type: ${reportData.subType || 'Unknown'}
+- Customer Type: ${reportData.customerType}
+- Purchase Status: ${reportData.purchaseStatus}
+- Call Context: ${reportData.callContext}
+
+Conversation Highlights:
+${normalizeList(reportData.conversationHighlights).map((x) => `- ${x}`).join('\n') || '- None'}
+
+Recommended Actions:
+${normalizeList(reportData.recommendedActions).map((x) => `- ${x}`).join('\n') || '- None'}
+
+Full Transcript:
+${transcriptLines.join('\n')}
+    `.trim();
+
+    const htmlBody = buildCallReportHtml(reportData);
+    await sendSummaryEmail(subject, plainTextBody, htmlBody);
+    console.log('✅ Recording-based summary email sent.');
+
+    callContextStore.delete(callSid);
+  } catch (err) {
+    console.error('❌ Recording-based summary failed:', err);
+  }
 });
 
 // WebSocket route for media-stream
@@ -776,7 +1189,6 @@ fastify.register(async (fastifyInstance) => {
 
     let callerPhone = 'Unknown';
     let callSid = 'Unknown';
-    const callStartedAt = Date.now();
 
     const openAiWs = new WebSocket(`wss://api.openai.com/v1/realtime?model=gpt-realtime&temperature=${TEMPERATURE}`, {
       headers: {
@@ -791,7 +1203,6 @@ fastify.register(async (fastifyInstance) => {
           type: 'realtime',
           model: 'gpt-realtime',
           output_modalities: ['audio'],
-
           audio: {
             input: {
               format: { type: 'audio/pcmu' },
@@ -972,142 +1383,8 @@ fastify.register(async (fastifyInstance) => {
     connection.on('close', async () => {
       try {
         if (openAiWs.readyState === WebSocket.OPEN) openAiWs.close();
-
-        const callEndedAt = Date.now();
-        const durationSeconds = Math.round((callEndedAt - callStartedAt) / 1000);
-        const durationText = formatDurationFromSeconds(durationSeconds);
-        const reportDate = new Date().toLocaleString();
-
-        const transcriptLines = transcript.length > 0 ? transcript : ['No transcript available.'];
-
-        console.log('TRANSCRIPT DEBUG:');
-        console.log(transcriptLines.join('\n'));
-
-        let analysis;
-        try {
-          analysis = await analyzeCallWithOpenAI({
-            transcriptLines,
-            callerPhone,
-            durationText,
-            reportDate
-          });
-        } catch (analysisError) {
-          console.error('❌ Structured call analysis failed:', analysisError);
-
-          analysis = {
-            callerName: 'Unknown Caller',
-            email: 'Not captured',
-            businessName: 'Not captured',
-            category: 'General Inquiry',
-            resolutionStatus: 'Unknown',
-            urgency: 'Medium',
-            sentiment: 'Neutral',
-            executiveSummary: 'A call was handled by the AI receptionist, but the structured post-call analysis could not be fully generated for this call. Please review the transcript directly below.',
-            followUpNeeded: 'Unknown',
-            escalationNeeded: 'Unknown',
-            leadOpportunity: 'None',
-            outcomeNotes: 'Structured analysis failed, so the transcript should be reviewed manually.',
-            product: 'N/A',
-            issue: 'N/A',
-            subType: '',
-            customerType: 'Unknown',
-            purchaseStatus: 'Unknown',
-            callContext: 'General Call',
-            rootCause: 'Unknown',
-            commercialValue: 'Low',
-            upsellOpportunity: 'Low',
-            escalationStatus: 'Unknown',
-            conversationHighlights: ['Structured analysis was unavailable for this call.'],
-            recommendedActions: ['Review the transcript manually.']
-          };
-        }
-
-        const reportData = {
-          logoUrl: 'https://via.placeholder.com/120x40?text=EW',
-          reportDate,
-          callerName: analysis.callerName || 'Unknown Caller',
-          callerPhone: callerPhone || 'Unknown',
-          callDuration: durationText,
-
-          category: analysis.category || 'General Inquiry',
-          resolutionStatus: analysis.resolutionStatus || 'Unknown',
-          urgency: analysis.urgency || 'Medium',
-          sentiment: analysis.sentiment || 'Neutral',
-
-          executiveSummary: analysis.executiveSummary || 'No summary available.',
-
-          followUpNeeded: analysis.followUpNeeded || 'Unknown',
-          escalationNeeded: analysis.escalationNeeded || 'Unknown',
-          leadOpportunity: analysis.leadOpportunity || 'None',
-          outcomeNotes: analysis.outcomeNotes || 'No outcome notes available.',
-
-          email: analysis.email || 'Not captured',
-          businessName: analysis.businessName || 'Not captured',
-          product: analysis.product || 'N/A',
-          issue: analysis.issue || 'N/A',
-          subType: analysis.subType || '',
-          customerType: analysis.customerType || 'Unknown',
-          purchaseStatus: analysis.purchaseStatus || 'Unknown',
-          callContext: analysis.callContext || 'General Call',
-
-          rootCause: analysis.rootCause || 'Unknown',
-          commercialValue: analysis.commercialValue || 'Low',
-          upsellOpportunity: analysis.upsellOpportunity || 'Low',
-          escalationStatus: analysis.escalationStatus || 'No Escalation Needed',
-
-          conversationHighlights: analysis.conversationHighlights || [],
-          recommendedActions: analysis.recommendedActions || [],
-          transcriptLines
-        };
-
-        const subject = `[EW AI CALL SUMMARY] ${reportDate} | ${reportData.category} | ${reportData.resolutionStatus}`;
-
-        const plainTextBody = `
-Electronic World - Call Intelligence Report
-
-Date: ${reportDate}
-Caller Name: ${reportData.callerName}
-Caller Phone: ${reportData.callerPhone}
-Call Duration: ${reportData.callDuration}
-Category: ${reportData.category}
-Resolution: ${reportData.resolutionStatus}
-Urgency: ${reportData.urgency}
-Sentiment: ${reportData.sentiment}
-
-Executive Summary:
-${reportData.executiveSummary}
-
-Call Outcome:
-- Follow-Up Needed: ${reportData.followUpNeeded}
-- Escalation Needed: ${reportData.escalationNeeded}
-- Lead Opportunity: ${reportData.leadOpportunity}
-- Outcome Notes: ${reportData.outcomeNotes}
-
-Key Business Details:
-- Email: ${reportData.email}
-- Business Name: ${reportData.businessName}
-- Product: ${reportData.product}
-- Issue: ${reportData.issue}
-- Sub-Type: ${reportData.subType || 'N/A'}
-- Customer Type: ${reportData.customerType}
-- Purchase Status: ${reportData.purchaseStatus}
-- Call Context: ${reportData.callContext}
-
-Conversation Highlights:
-${normalizeList(reportData.conversationHighlights).map((x) => `- ${x}`).join('\n') || '- None'}
-
-Recommended Actions:
-${normalizeList(reportData.recommendedActions).map((x) => `- ${x}`).join('\n') || '- None'}
-
-Full Transcript:
-${transcriptLines.join('\n')}
-        `.trim();
-
-        const htmlBody = buildCallReportHtml(reportData);
-        await sendSummaryEmail(subject, plainTextBody, htmlBody);
-        console.log('✅ Summary email sent.');
       } catch (err) {
-        console.error('❌ Summary email failed:', err);
+        console.error('❌ Error during websocket close:', err);
       } finally {
         console.log('Client disconnected.');
       }

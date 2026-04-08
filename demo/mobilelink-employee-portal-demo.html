@@ -1,0 +1,2599 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MobileLink x EW Employee Portal Demo</title>
+    <meta
+      name="description"
+      content="Interactive demo for a MobileLink employee dashboard with leaderboard, training, uploads, and accessory earnings."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #090b16;
+        --bg-2: #11142a;
+        --panel: rgba(16, 20, 42, 0.78);
+        --panel-strong: rgba(18, 24, 49, 0.96);
+        --panel-soft: rgba(255, 255, 255, 0.06);
+        --border: rgba(255, 255, 255, 0.09);
+        --border-strong: rgba(255, 255, 255, 0.16);
+        --text: #f7f8ff;
+        --muted: #aab0d6;
+        --muted-2: #7a84b0;
+        --lime: #bef264;
+        --aqua: #67e8f9;
+        --pink: #f472b6;
+        --orange: #fb923c;
+        --danger: #fb7185;
+        --shadow: 0 24px 70px rgba(0, 0, 0, 0.38);
+        --radius-xl: 32px;
+        --radius-lg: 24px;
+        --radius-md: 18px;
+        --radius-sm: 14px;
+        --font-display: "Space Grotesk", "Avenir Next", "Trebuchet MS", sans-serif;
+        --font-sans: "Manrope", "Avenir Next", "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background:
+          radial-gradient(circle at top left, rgba(103, 232, 249, 0.13), transparent 24rem),
+          radial-gradient(circle at top right, rgba(244, 114, 182, 0.14), transparent 28rem),
+          radial-gradient(circle at bottom center, rgba(190, 242, 100, 0.08), transparent 36rem),
+          linear-gradient(180deg, #080b16 0%, #0d1022 100%);
+        color: var(--text);
+        font-family: var(--font-sans);
+      }
+
+      body {
+        line-height: 1.45;
+      }
+
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      .page-shell {
+        position: relative;
+        min-height: 100vh;
+        overflow: hidden;
+      }
+
+      .glow {
+        position: fixed;
+        border-radius: 999px;
+        filter: blur(60px);
+        pointer-events: none;
+        opacity: 0.55;
+      }
+
+      .glow.one {
+        width: 20rem;
+        height: 20rem;
+        top: -6rem;
+        left: -3rem;
+        background: rgba(103, 232, 249, 0.18);
+      }
+
+      .glow.two {
+        width: 24rem;
+        height: 24rem;
+        top: 20%;
+        right: -8rem;
+        background: rgba(244, 114, 182, 0.18);
+      }
+
+      .glow.three {
+        width: 18rem;
+        height: 18rem;
+        bottom: -4rem;
+        left: 28%;
+        background: rgba(190, 242, 100, 0.12);
+      }
+
+      .auth-screen {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(22rem, 30rem);
+        gap: 2rem;
+        width: min(1180px, calc(100% - 2rem));
+        margin: 0 auto;
+        padding: 2rem 0;
+        min-height: 100vh;
+        align-items: center;
+      }
+
+      .hero-card,
+      .auth-card,
+      .panel,
+      .card,
+      .modal-card {
+        border: 1px solid var(--border);
+        background: var(--panel);
+        backdrop-filter: blur(22px);
+        box-shadow: var(--shadow);
+      }
+
+      .hero-card {
+        padding: 2.25rem;
+        border-radius: var(--radius-xl);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .hero-card::after {
+        content: "";
+        position: absolute;
+        inset: auto -3rem -3rem auto;
+        width: 14rem;
+        height: 14rem;
+        border-radius: 999px;
+        background: radial-gradient(circle, rgba(190, 242, 100, 0.35), transparent 70%);
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        padding: 0.55rem 0.85rem;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--aqua);
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .hero-title,
+      .section-title,
+      .auth-title,
+      .modal-title {
+        font-family: var(--font-display);
+        letter-spacing: -0.03em;
+      }
+
+      .hero-title {
+        margin: 1.2rem 0 0.9rem;
+        font-size: clamp(2.4rem, 4vw, 4.6rem);
+        line-height: 0.95;
+        max-width: 10ch;
+      }
+
+      .hero-copy,
+      .auth-copy,
+      .muted {
+        color: var(--muted);
+      }
+
+      .hero-grid {
+        margin-top: 1.6rem;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1rem;
+      }
+
+      .hero-stat {
+        padding: 1rem;
+        border-radius: var(--radius-md);
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .hero-stat strong {
+        display: block;
+        font-size: 1.5rem;
+        font-family: var(--font-display);
+      }
+
+      .hero-list {
+        margin: 1.5rem 0 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 0.9rem;
+      }
+
+      .hero-list li {
+        display: flex;
+        gap: 0.8rem;
+        align-items: flex-start;
+      }
+
+      .dot {
+        width: 0.8rem;
+        height: 0.8rem;
+        border-radius: 999px;
+        margin-top: 0.35rem;
+        background: linear-gradient(135deg, var(--lime), var(--aqua));
+        box-shadow: 0 0 0 0.28rem rgba(190, 242, 100, 0.12);
+        flex: 0 0 auto;
+      }
+
+      .auth-card {
+        border-radius: var(--radius-xl);
+        padding: 1.5rem;
+      }
+
+      .auth-tabs {
+        display: inline-grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.35rem;
+        width: 100%;
+        padding: 0.35rem;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      .auth-tab {
+        border: 0;
+        border-radius: 999px;
+        padding: 0.8rem 1rem;
+        background: transparent;
+        color: var(--muted);
+        font-weight: 800;
+      }
+
+      .auth-tab.active {
+        background: linear-gradient(135deg, var(--lime), #dcfce7);
+        color: #111827;
+      }
+
+      .auth-body {
+        margin-top: 1.25rem;
+      }
+
+      .auth-title {
+        margin: 0;
+        font-size: 1.8rem;
+      }
+
+      .auth-copy {
+        margin-top: 0.45rem;
+      }
+
+      .form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.85rem;
+        margin-top: 1.15rem;
+      }
+
+      .field {
+        display: grid;
+        gap: 0.45rem;
+      }
+
+      .field.full {
+        grid-column: 1 / -1;
+      }
+
+      .label {
+        color: var(--muted);
+        font-size: 0.82rem;
+        font-weight: 700;
+      }
+
+      .input,
+      .select,
+      .textarea {
+        width: 100%;
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        border-radius: 16px;
+        background: rgba(7, 10, 22, 0.88);
+        color: var(--text);
+        padding: 0.95rem 1rem;
+        outline: none;
+        transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+      }
+
+      .input:focus,
+      .select:focus,
+      .textarea:focus {
+        border-color: rgba(103, 232, 249, 0.5);
+        box-shadow: 0 0 0 0.2rem rgba(103, 232, 249, 0.12);
+      }
+
+      .textarea {
+        min-height: 7rem;
+        resize: vertical;
+      }
+
+      .helper {
+        margin-top: 0.75rem;
+        color: var(--muted-2);
+        font-size: 0.83rem;
+      }
+
+      .button-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.8rem;
+        margin-top: 1.25rem;
+      }
+
+      .btn,
+      .ghost-btn,
+      .soft-btn {
+        border: 0;
+        border-radius: 999px;
+        padding: 0.95rem 1.2rem;
+        font-weight: 800;
+        letter-spacing: 0.01em;
+      }
+
+      .btn {
+        background: linear-gradient(135deg, var(--lime), #fef08a);
+        color: #111827;
+      }
+
+      .ghost-btn {
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--text);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .soft-btn {
+        background: rgba(103, 232, 249, 0.08);
+        color: var(--aqua);
+        border: 1px solid rgba(103, 232, 249, 0.18);
+      }
+
+      .quick-users {
+        margin-top: 1.4rem;
+        padding-top: 1.15rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.07);
+      }
+
+      .quick-grid {
+        margin-top: 0.9rem;
+        display: grid;
+        gap: 0.75rem;
+      }
+
+      .quick-btn {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        width: 100%;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 18px;
+        padding: 0.9rem 1rem;
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--text);
+      }
+
+      .quick-meta strong {
+        display: block;
+      }
+
+      .quick-pill {
+        padding: 0.45rem 0.7rem;
+        border-radius: 999px;
+        background: rgba(190, 242, 100, 0.13);
+        color: var(--lime);
+        font-size: 0.75rem;
+        font-weight: 800;
+      }
+
+      .app-shell {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-columns: 18rem minmax(0, 1fr);
+        gap: 1.3rem;
+        width: min(1460px, calc(100% - 2rem));
+        margin: 0 auto;
+        padding: 1rem 0 1.5rem;
+      }
+
+      .sidebar {
+        position: sticky;
+        top: 1rem;
+        align-self: start;
+        min-height: calc(100vh - 2rem);
+        border-radius: var(--radius-xl);
+        padding: 1.25rem;
+        background: rgba(11, 14, 30, 0.88);
+        border: 1px solid var(--border);
+        backdrop-filter: blur(26px);
+      }
+
+      .brand {
+        display: grid;
+        gap: 0.3rem;
+      }
+
+      .brand-badge {
+        width: 3rem;
+        height: 3rem;
+        border-radius: 18px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, var(--aqua), var(--lime));
+        color: #111827;
+        font-family: var(--font-display);
+        font-weight: 700;
+        font-size: 1.15rem;
+      }
+
+      .brand h1 {
+        margin: 0.75rem 0 0;
+        font-family: var(--font-display);
+        font-size: 1.3rem;
+        line-height: 1;
+      }
+
+      .brand p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .nav {
+        display: grid;
+        gap: 0.55rem;
+        margin-top: 1.4rem;
+      }
+
+      .nav-btn {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.8rem;
+        width: 100%;
+        padding: 0.95rem 1rem;
+        border-radius: 18px;
+        background: transparent;
+        border: 1px solid transparent;
+        color: var(--muted);
+        text-align: left;
+        font-weight: 700;
+      }
+
+      .nav-btn.active {
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(255, 255, 255, 0.08);
+      }
+
+      .nav-btn .nav-tag {
+        color: var(--muted-2);
+        font-size: 0.72rem;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .sidebar-profile {
+        margin-top: 1.25rem;
+        padding: 1rem;
+        border-radius: 22px;
+        background: linear-gradient(180deg, rgba(103, 232, 249, 0.08), rgba(244, 114, 182, 0.06));
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .avatar {
+        width: 3rem;
+        height: 3rem;
+        border-radius: 18px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, rgba(103, 232, 249, 0.24), rgba(244, 114, 182, 0.26));
+        color: var(--text);
+        font-family: var(--font-display);
+        font-size: 1rem;
+        font-weight: 700;
+      }
+
+      .sidebar-actions {
+        margin-top: 1.1rem;
+        display: grid;
+        gap: 0.6rem;
+      }
+
+      .sidebar-cta {
+        width: 100%;
+        border-radius: 18px;
+        padding: 0.95rem 1rem;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--text);
+        text-align: left;
+      }
+
+      .main-shell {
+        min-width: 0;
+      }
+
+      .topbar {
+        position: sticky;
+        top: 1rem;
+        z-index: 20;
+        margin-bottom: 1rem;
+        padding: 1rem 1.1rem;
+        border-radius: 24px;
+        background: rgba(10, 13, 27, 0.82);
+        border: 1px solid var(--border);
+        backdrop-filter: blur(24px);
+      }
+
+      .topbar-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 1rem;
+        align-items: center;
+      }
+
+      .greeting h2 {
+        margin: 0;
+        font-family: var(--font-display);
+        font-size: clamp(1.5rem, 3vw, 2.6rem);
+        line-height: 0.96;
+      }
+
+      .greeting p {
+        margin: 0.35rem 0 0;
+        color: var(--muted);
+      }
+
+      .topbar-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        justify-content: flex-end;
+      }
+
+      .meta-pill {
+        padding: 0.75rem 0.95rem;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        font-size: 0.86rem;
+        font-weight: 700;
+      }
+
+      .meta-pill strong {
+        color: var(--lime);
+      }
+
+      .content-grid {
+        display: grid;
+        gap: 1rem;
+      }
+
+      .hero-banner,
+      .section-head,
+      .stat-grid,
+      .split-grid,
+      .board-grid,
+      .training-grid,
+      .upload-grid,
+      .builder-grid,
+      .reward-grid {
+        display: grid;
+        gap: 1rem;
+      }
+
+      .hero-banner {
+        grid-template-columns: minmax(0, 1.1fr) minmax(20rem, 28rem);
+      }
+
+      .panel,
+      .card {
+        border-radius: var(--radius-lg);
+        padding: 1.25rem;
+      }
+
+      .headline-card {
+        position: relative;
+        overflow: hidden;
+        background:
+          linear-gradient(135deg, rgba(103, 232, 249, 0.12), rgba(244, 114, 182, 0.1)),
+          rgba(16, 20, 42, 0.88);
+      }
+
+      .headline-card::before {
+        content: "";
+        position: absolute;
+        inset: auto 0 0 auto;
+        width: 12rem;
+        height: 12rem;
+        border-radius: 999px;
+        background: radial-gradient(circle, rgba(103, 232, 249, 0.2), transparent 72%);
+      }
+
+      .mini-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0.45rem 0.7rem;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--aqua);
+        font-size: 0.75rem;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .headline-card h3,
+      .section-title,
+      .card-title {
+        margin: 0.9rem 0 0.45rem;
+        font-family: var(--font-display);
+      }
+
+      .headline-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-top: 1.2rem;
+      }
+
+      .stat-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .stat-card {
+        border-radius: 22px;
+        padding: 1.1rem;
+        background: rgba(13, 17, 37, 0.82);
+        border: 1px solid rgba(255, 255, 255, 0.07);
+      }
+
+      .stat-card .label {
+        display: block;
+      }
+
+      .stat-value {
+        margin-top: 0.25rem;
+        font-size: 1.9rem;
+        font-family: var(--font-display);
+      }
+
+      .trend {
+        margin-top: 0.35rem;
+        color: var(--lime);
+        font-size: 0.84rem;
+        font-weight: 700;
+      }
+
+      .split-grid {
+        grid-template-columns: minmax(0, 1.2fr) minmax(18rem, 0.8fr);
+      }
+
+      .section-head {
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: end;
+      }
+
+      .section-title {
+        font-size: 1.6rem;
+      }
+
+      .tabs,
+      .pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.55rem;
+      }
+
+      .tab-btn,
+      .pill-btn {
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--muted);
+        padding: 0.72rem 1rem;
+        font-weight: 800;
+      }
+
+      .tab-btn.active,
+      .pill-btn.active {
+        background: rgba(190, 242, 100, 0.12);
+        border-color: rgba(190, 242, 100, 0.25);
+        color: var(--lime);
+      }
+
+      .leaderboard-card,
+      .training-card,
+      .upload-card,
+      .builder-card,
+      .reward-card {
+        border-radius: 22px;
+        padding: 1.15rem;
+        background: rgba(13, 17, 37, 0.82);
+        border: 1px solid rgba(255, 255, 255, 0.07);
+      }
+
+      .podium {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.9rem;
+        margin-top: 1rem;
+      }
+
+      .podium-card {
+        padding: 1rem;
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.07);
+      }
+
+      .podium-rank {
+        display: inline-flex;
+        padding: 0.35rem 0.6rem;
+        border-radius: 999px;
+        font-size: 0.74rem;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .rank-1 {
+        background: rgba(190, 242, 100, 0.14);
+        color: var(--lime);
+      }
+
+      .rank-2 {
+        background: rgba(103, 232, 249, 0.13);
+        color: var(--aqua);
+      }
+
+      .rank-3 {
+        background: rgba(251, 146, 60, 0.14);
+        color: var(--orange);
+      }
+
+      .board-table {
+        margin-top: 1rem;
+        display: grid;
+        gap: 0.7rem;
+      }
+
+      .board-row {
+        display: grid;
+        grid-template-columns: 4rem minmax(0, 1fr) 7rem 7rem 7rem;
+        gap: 0.8rem;
+        align-items: center;
+        padding: 0.9rem 1rem;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      .board-row.you {
+        background: linear-gradient(135deg, rgba(190, 242, 100, 0.12), rgba(103, 232, 249, 0.08));
+        border-color: rgba(190, 242, 100, 0.22);
+      }
+
+      .board-cell strong {
+        display: block;
+      }
+
+      .board-label {
+        color: var(--muted-2);
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .progress-wrap {
+        margin-top: 0.95rem;
+      }
+
+      .progress-track {
+        width: 100%;
+        height: 0.75rem;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        overflow: hidden;
+      }
+
+      .progress-bar {
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--aqua), var(--lime), #fde68a);
+      }
+
+      .training-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .training-card header,
+      .upload-card header,
+      .builder-card header {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        align-items: start;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.42rem 0.68rem;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--muted);
+        font-size: 0.74rem;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .chip.good {
+        background: rgba(190, 242, 100, 0.12);
+        color: var(--lime);
+      }
+
+      .chip.info {
+        background: rgba(103, 232, 249, 0.12);
+        color: var(--aqua);
+      }
+
+      .chip.warn {
+        background: rgba(251, 146, 60, 0.13);
+        color: var(--orange);
+      }
+
+      .meta-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.55rem;
+        margin-top: 0.85rem;
+      }
+
+      .meta-row span {
+        padding: 0.42rem 0.65rem;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--muted);
+        font-size: 0.8rem;
+      }
+
+      .task-list,
+      .reward-list,
+      .submission-list,
+      .bag-list {
+        margin: 1rem 0 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 0.7rem;
+      }
+
+      .task-item,
+      .reward-item,
+      .submission-item,
+      .bag-item {
+        display: grid;
+        gap: 0.2rem;
+        padding: 0.85rem 0.95rem;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      .upload-grid {
+        grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+      }
+
+      .upload-card {
+        min-height: 100%;
+      }
+
+      .portal-banner {
+        margin-top: 1rem;
+        padding: 1rem;
+        border-radius: 20px;
+        background:
+          linear-gradient(135deg, rgba(244, 114, 182, 0.12), rgba(103, 232, 249, 0.08)),
+          rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .builder-grid {
+        grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+      }
+
+      .builder-products {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.9rem;
+        margin-top: 1rem;
+      }
+
+      .product-card {
+        padding: 1rem;
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      .product-card strong {
+        display: block;
+        margin-top: 0.4rem;
+      }
+
+      .price-strip {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.8rem;
+        margin-top: 0.8rem;
+        color: var(--muted);
+        font-size: 0.83rem;
+      }
+
+      .stack {
+        display: grid;
+        gap: 1rem;
+      }
+
+      .reward-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .mini-chart {
+        display: grid;
+        gap: 0.75rem;
+        margin-top: 0.9rem;
+      }
+
+      .chart-row {
+        display: grid;
+        grid-template-columns: 7rem minmax(0, 1fr) 4.5rem;
+        gap: 0.8rem;
+        align-items: center;
+      }
+
+      .bar-track {
+        width: 100%;
+        height: 0.72rem;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        overflow: hidden;
+      }
+
+      .bar-fill {
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--pink), var(--aqua));
+      }
+
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(3, 5, 12, 0.68);
+        backdrop-filter: blur(18px);
+        display: grid;
+        place-items: center;
+        padding: 1rem;
+        z-index: 50;
+      }
+
+      .modal-card {
+        width: min(760px, 100%);
+        max-height: calc(100vh - 2rem);
+        overflow: auto;
+        border-radius: 28px;
+        padding: 1.3rem;
+      }
+
+      .modal-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        align-items: start;
+      }
+
+      .modal-title {
+        margin: 0;
+        font-size: 1.7rem;
+      }
+
+      .close-btn {
+        width: 2.6rem;
+        height: 2.6rem;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--text);
+      }
+
+      .modal-body {
+        margin-top: 1rem;
+      }
+
+      .modal-grid {
+        display: grid;
+        gap: 1rem;
+      }
+
+      .duo-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.9rem;
+      }
+
+      .lesson-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 0.65rem;
+      }
+
+      .lesson-item {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.85rem 0.95rem;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      .footer-note {
+        margin-top: 1rem;
+        color: var(--muted-2);
+        font-size: 0.82rem;
+      }
+
+      @media (max-width: 1180px) {
+        .auth-screen,
+        .app-shell,
+        .hero-banner,
+        .split-grid,
+        .upload-grid,
+        .builder-grid,
+        .topbar-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          position: static;
+          min-height: auto;
+        }
+
+        .stat-grid,
+        .reward-grid,
+        .training-grid,
+        .builder-products,
+        .hero-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .topbar-meta {
+          justify-content: flex-start;
+        }
+      }
+
+      @media (max-width: 760px) {
+        .auth-screen,
+        .app-shell {
+          width: min(100%, calc(100% - 1rem));
+          padding-top: 0.5rem;
+        }
+
+        .auth-screen,
+        .form-grid,
+        .podium,
+        .stat-grid,
+        .reward-grid,
+        .training-grid,
+        .builder-products,
+        .hero-grid,
+        .duo-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .board-row {
+          grid-template-columns: 3rem minmax(0, 1fr);
+        }
+
+        .board-row .board-cell:not(:nth-child(1)):not(:nth-child(2)) {
+          grid-column: 2;
+        }
+
+        .chart-row {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page-shell">
+      <div class="glow one"></div>
+      <div class="glow two"></div>
+      <div class="glow three"></div>
+
+      <section id="authScreen" class="auth-screen">
+        <article class="hero-card">
+          <div class="eyebrow">Employee experience demo</div>
+          <h1 class="hero-title">One portal for every MobileLink teammate.</h1>
+          <p class="hero-copy">
+            Demo the full vision: role-based leaderboard, personal training progress, creator uploads, and
+            accessory earnings all in one Gen Z-ready experience.
+          </p>
+
+          <div class="hero-grid">
+            <div class="hero-stat">
+              <span class="label">Audience</span>
+              <strong>1,500</strong>
+              <span class="muted">employees</span>
+            </div>
+            <div class="hero-stat">
+              <span class="label">APO refresh</span>
+              <strong>48h</strong>
+              <span class="muted">import cadence</span>
+            </div>
+            <div class="hero-stat">
+              <span class="label">Core modules</span>
+              <strong>4</strong>
+              <span class="muted">inside one hub</span>
+            </div>
+          </div>
+
+          <ul class="hero-list">
+            <li>
+              <span class="dot"></span>
+              <div>
+                <strong>Leaderboard-first experience</strong>
+                <div class="muted">See SD, TM, and Store Manager rankings the moment someone logs in.</div>
+              </div>
+            </li>
+            <li>
+              <span class="dot"></span>
+              <div>
+                <strong>Training that remembers the user</strong>
+                <div class="muted">Assigned courses, completion history, and rewards stay tied to each profile.</div>
+              </div>
+            </li>
+            <li>
+              <span class="dot"></span>
+              <div>
+                <strong>Creator uploads and accessory earnings</strong>
+                <div class="muted">Let teammates submit brand content and track accessory wins without leaving the portal.</div>
+              </div>
+            </li>
+          </ul>
+        </article>
+
+        <article class="auth-card">
+          <div class="auth-tabs">
+            <button class="auth-tab active" data-action="auth-mode" data-mode="login">Login</button>
+            <button class="auth-tab" data-action="auth-mode" data-mode="register">Register</button>
+          </div>
+
+          <div class="auth-body">
+            <h2 class="auth-title" id="authTitle">Welcome back</h2>
+            <p class="auth-copy" id="authCopy">Use a demo account or create a new profile to preview the personalized portal.</p>
+
+            <form id="authForm">
+              <div class="form-grid" id="authFields"></div>
+              <div class="button-row">
+                <button class="btn" type="submit" id="authSubmit">Enter portal</button>
+                <button class="ghost-btn" type="button" data-action="seed-demo-user" data-user-id="ariana-wells">Use Ariana demo</button>
+              </div>
+              <div class="helper" id="authHelper">For demo mode, passwords are visual only and are not validated against a live backend.</div>
+            </form>
+
+            <div class="quick-users">
+              <strong>Quick demo personas</strong>
+              <div class="quick-grid" id="quickGrid"></div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section id="appShell" class="app-shell hidden">
+        <aside class="sidebar">
+          <div class="brand">
+            <div class="brand-badge">EW</div>
+            <h1>MobileLink x EW Hub</h1>
+            <p>Leaderboard, training, uploads, and accessory wins in one place.</p>
+          </div>
+
+          <nav class="nav" id="navMount"></nav>
+
+          <div class="sidebar-profile" id="sidebarProfile"></div>
+
+          <div class="sidebar-actions">
+            <button class="sidebar-cta" data-action="open-link-modal" data-link-key="ewPortal">
+              Open EW creator portal
+            </button>
+            <button class="sidebar-cta" data-action="open-link-modal" data-link-key="trainingHub">
+              Open training portal
+            </button>
+            <button class="sidebar-cta" data-action="logout">Log out</button>
+          </div>
+        </aside>
+
+        <main class="main-shell">
+          <header class="topbar" id="topbarMount"></header>
+          <div class="content-grid" id="contentMount"></div>
+        </main>
+      </section>
+
+      <div id="modalBackdrop" class="modal-backdrop hidden">
+        <div class="modal-card" id="modalCard"></div>
+      </div>
+    </div>
+
+    <script>
+      const STORAGE_KEY = "ml-ew-portal-demo-v1";
+
+      const navItems = [
+        { id: "dashboard", label: "Dashboard", tag: "Overview" },
+        { id: "leaderboard", label: "Leaderboard", tag: "APO" },
+        { id: "training", label: "Training", tag: "LMS" },
+        { id: "uploads", label: "Uploads", tag: "Creator" },
+        { id: "builder", label: "Accessory Builder", tag: "Earnings" }
+      ];
+
+      const demoProfiles = [
+        {
+          id: "ariana-wells",
+          firstName: "Ariana",
+          lastName: "Wells",
+          email: "ariana@mobilelink.demo",
+          role: "sd",
+          roleLabel: "SD Level",
+          title: "Signal District Lead",
+          store: "Sugar Land Flagship",
+          region: "Houston South",
+          apo: 93.6,
+          rank: 4,
+          streak: 14,
+          wallet: 286,
+          earningsYtd: 4820,
+          accessoryGp: 1380,
+          monthlyGoal: 96,
+          avatar: "AW",
+          trainingStatus: {
+            "apo-blueprint": 78,
+            "creator-brand-lab": 100,
+            "accessory-stack": 62
+          },
+          bag: ["jam-blox", "mag-power", "shield-pack"],
+          submissions: [
+            {
+              id: "sub-1",
+              title: "Weekend audio reel",
+              type: "Social clip",
+              status: "Under review",
+              reward: "$75 potential",
+              note: "Shot in-store with accessory bundle callouts."
+            }
+          ]
+        },
+        {
+          id: "marcus-king",
+          firstName: "Marcus",
+          lastName: "King",
+          email: "marcus@mobilelink.demo",
+          role: "tm",
+          roleLabel: "TM Level",
+          title: "Territory Manager",
+          store: "Galleria Cluster",
+          region: "Houston Metro",
+          apo: 95.8,
+          rank: 2,
+          streak: 9,
+          wallet: 410,
+          earningsYtd: 7340,
+          accessoryGp: 2240,
+          monthlyGoal: 97,
+          avatar: "MK",
+          trainingStatus: {
+            "apo-blueprint": 100,
+            "creator-brand-lab": 55,
+            "manager-coach-mode": 71
+          },
+          bag: ["power-pod", "glass-lab", "lux-case"],
+          submissions: [
+            {
+              id: "sub-2",
+              title: "District leader spotlight",
+              type: "Brand story",
+              status: "Approved",
+              reward: "$150 earned",
+              note: "Approved for next EW internal campaign."
+            }
+          ]
+        },
+        {
+          id: "vanessa-ortiz",
+          firstName: "Vanessa",
+          lastName: "Ortiz",
+          email: "vanessa@mobilelink.demo",
+          role: "manager",
+          roleLabel: "Store Manager",
+          title: "Store Manager",
+          store: "Pearland Prime",
+          region: "Greater Houston",
+          apo: 97.4,
+          rank: 1,
+          streak: 18,
+          wallet: 560,
+          earningsYtd: 9280,
+          accessoryGp: 2795,
+          monthlyGoal: 98,
+          avatar: "VO",
+          trainingStatus: {
+            "manager-coach-mode": 100,
+            "creator-brand-lab": 88,
+            "accessory-stack": 100
+          },
+          bag: ["lux-case", "jam-blox", "car-flex", "mag-power"],
+          submissions: [
+            {
+              id: "sub-3",
+              title: "Manager challenge kickoff",
+              type: "Team video",
+              status: "Scheduled",
+              reward: "$250 pool",
+              note: "Queued for next week challenge drop."
+            }
+          ]
+        }
+      ];
+
+      const trainingCatalog = [
+        {
+          id: "apo-blueprint",
+          title: "APO Blueprint",
+          badge: "Assigned",
+          focus: "Leaderboard lift",
+          minutes: 26,
+          reward: 80,
+          roles: ["sd", "tm"],
+          description: "The exact sales motions that raise APO without sounding scripted on the floor.",
+          lessons: ["Greeting flow", "Need discovery", "Accessory pivot", "Soft close"],
+          takeaways: ["Raise attach naturally", "Tighter transitions", "Stronger bundle storytelling"]
+        },
+        {
+          id: "creator-brand-lab",
+          title: "Creator Brand Lab",
+          badge: "Content",
+          focus: "Upload-ready content",
+          minutes: 18,
+          reward: 60,
+          roles: ["sd", "tm", "manager"],
+          description: "How to shoot short-form brand videos that feel native, sharp, and reward-worthy.",
+          lessons: ["Hooks that stop scroll", "In-store framing", "Brand voice", "Submission standards"],
+          takeaways: ["Cleaner UGC", "Faster approvals", "More campaign-ready footage"]
+        },
+        {
+          id: "accessory-stack",
+          title: "Accessory Stack Mastery",
+          badge: "Revenue",
+          focus: "Margin and earnings",
+          minutes: 31,
+          reward: 100,
+          roles: ["sd", "manager"],
+          description: "Build high-margin accessory stacks, track your portfolio, and speak in value instead of discount.",
+          lessons: ["Category mix", "Why attach wins", "Bundle defense", "Repeatable stack scripts"],
+          takeaways: ["Higher GP", "Better bag mix", "Cleaner commission story"]
+        },
+        {
+          id: "manager-coach-mode",
+          title: "Manager Coach Mode",
+          badge: "Leadership",
+          focus: "Store performance",
+          minutes: 34,
+          reward: 120,
+          roles: ["tm", "manager"],
+          description: "Coach teams against APO, celebrate wins, and run a high-energy store cadence.",
+          lessons: ["Daily huddle", "Scoreboard rituals", "Role-based coaching", "Recognition loops"],
+          takeaways: ["Sharper team accountability", "Cleaner scorecards", "Better store energy"]
+        }
+      ];
+
+      const accessoryCatalog = [
+        { id: "jam-blox", name: "Jambox 100X", category: "Audio", gp: 36, commission: 12, vibe: "Backyard energy" },
+        { id: "mag-power", name: "MagSafe Power Cube", category: "Power", gp: 18, commission: 6, vibe: "Daily attach" },
+        { id: "shield-pack", name: "Glass + Case Shield Pack", category: "Protection", gp: 24, commission: 8, vibe: "Easy bundle" },
+        { id: "power-pod", name: "Dual USB-C Power Pod", category: "Power", gp: 21, commission: 7, vibe: "Travel seller" },
+        { id: "glass-lab", name: "Pro Glass Install Kit", category: "Protection", gp: 15, commission: 5, vibe: "Fast close" },
+        { id: "lux-case", name: "Luxe Impact Case", category: "Cases", gp: 19, commission: 6, vibe: "Style plus margin" },
+        { id: "car-flex", name: "Car Flex Mount", category: "Mounts", gp: 17, commission: 5, vibe: "Impulse add-on" }
+      ];
+
+      const leaderboardData = {
+        sd: [
+          { name: "Sabrina Patel", store: "Bellaire", region: "Houston South", apo: 97.9, wins: 18, reward: 540 },
+          { name: "Jayden Ross", store: "Katy Mills", region: "West Houston", apo: 96.7, wins: 16, reward: 465 },
+          { name: "Lena Brooks", store: "League City", region: "Bay Area", apo: 95.1, wins: 14, reward: 390 },
+          { name: "Chris Nguyen", store: "Sugar Land", region: "Houston South", apo: 92.8, wins: 13, reward: 315 },
+          { name: "Mia Salazar", store: "Missouri City", region: "Houston South", apo: 91.9, wins: 10, reward: 280 }
+        ],
+        tm: [
+          { name: "Van Perry", store: "Northwest Cluster", region: "Houston Metro", apo: 96.6, wins: 20, reward: 710 },
+          { name: "Marcus King", store: "Galleria Cluster", region: "Houston Metro", apo: 95.8, wins: 19, reward: 680 },
+          { name: "Cam Ellis", store: "East Loop Cluster", region: "Houston Metro", apo: 94.4, wins: 17, reward: 590 },
+          { name: "Nina Valdez", store: "Pearland Cluster", region: "Bay Area", apo: 93.7, wins: 15, reward: 520 }
+        ],
+        manager: [
+          { name: "Vanessa Ortiz", store: "Pearland Prime", region: "Greater Houston", apo: 97.4, wins: 22, reward: 860 },
+          { name: "Oliver Chen", store: "Memorial City", region: "West Houston", apo: 96.2, wins: 19, reward: 740 },
+          { name: "Rosa Diaz", store: "Katy Boardwalk", region: "West Houston", apo: 95.6, wins: 17, reward: 690 },
+          { name: "Tasha Green", store: "Heights Select", region: "Inner Loop", apo: 94.1, wins: 15, reward: 620 }
+        ]
+      };
+
+      const rewardCards = [
+        {
+          title: "APO heat week",
+          note: "Top 10 across roles split a reward pool plus shout-outs inside the portal.",
+          payout: "$2,500 pool"
+        },
+        {
+          title: "Brand creator drop",
+          note: "Approved social clips unlock instant cash-back and campaign features.",
+          payout: "$50 to $250"
+        },
+        {
+          title: "Store momentum bonus",
+          note: "Teams that hit training and APO milestones unlock extra accessory contests.",
+          payout: "Monthly stack"
+        }
+      ];
+
+      const linkMap = {
+        ewPortal: {
+          title: "EW Creator Portal",
+          url: "https://replace-with-your-ew-creator-link.example",
+          copy: "Swap this placeholder with your real upload portal. In production this button can deep-link and SSO the employee."
+        },
+        trainingHub: {
+          title: "Training Hub",
+          url: "https://replace-with-your-training-link.example",
+          copy: "This could open a custom LMS route, a Firebase-hosted training page, or an external learning system."
+        },
+        accessoryBuilder: {
+          title: "Accessory Builder",
+          url: "https://replace-with-your-builder-link.example",
+          copy: "Hook this to your existing accessory builder when you are ready. The dashboard can still keep the earnings summary."
+        }
+      };
+
+      const baseState = createBaseState();
+      let state = loadState();
+
+      function createBaseState() {
+        const profiles = {};
+        demoProfiles.forEach((profile) => {
+          profiles[profile.id] = JSON.parse(JSON.stringify(profile));
+        });
+
+        return {
+          authMode: "login",
+          activeSection: "dashboard",
+          leaderboardRole: "sd",
+          currentProfileId: null,
+          modal: null,
+          profiles
+        };
+      }
+
+      function loadState() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return JSON.parse(JSON.stringify(baseState));
+          const parsed = JSON.parse(raw);
+          return {
+            ...JSON.parse(JSON.stringify(baseState)),
+            ...parsed,
+            profiles: {
+              ...JSON.parse(JSON.stringify(baseState)).profiles,
+              ...(parsed.profiles || {})
+            }
+          };
+        } catch (error) {
+          return JSON.parse(JSON.stringify(baseState));
+        }
+      }
+
+      function saveState() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      }
+
+      function escapeHtml(value) {
+        return String(value || "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      function currency(value) {
+        return new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency: "USD",
+          maximumFractionDigits: 0
+        }).format(value);
+      }
+
+      function percent(value) {
+        return `${Number(value).toFixed(1)}%`;
+      }
+
+      function plural(value, word) {
+        return `${value} ${word}${value === 1 ? "" : "s"}`;
+      }
+
+      function getProfile() {
+        return state.currentProfileId ? state.profiles[state.currentProfileId] : null;
+      }
+
+      function getAssignedTrainings(profile) {
+        return trainingCatalog.filter((item) => item.roles.includes(profile.role));
+      }
+
+      function getTrainingCompletion(profile, trainingId) {
+        return Number(profile.trainingStatus?.[trainingId] || 0);
+      }
+
+      function getBagItems(profile) {
+        return profile.bag.map((id) => accessoryCatalog.find((item) => item.id === id)).filter(Boolean);
+      }
+
+      function getBagTotals(profile) {
+        const items = getBagItems(profile);
+        return items.reduce(
+          (acc, item) => {
+            acc.gp += item.gp;
+            acc.commission += item.commission;
+            return acc;
+          },
+          { gp: 0, commission: 0 }
+        );
+      }
+
+      function getLeaderboard(role) {
+        const profile = getProfile();
+        const rows = leaderboardData[role].map((row) => ({ ...row, isYou: false }));
+
+        if (profile && profile.role === role) {
+          const alreadyExists = rows.some((row) => row.name.toLowerCase() === `${profile.firstName} ${profile.lastName}`.toLowerCase());
+          if (!alreadyExists) {
+            rows.push({
+              name: `${profile.firstName} ${profile.lastName}`,
+              store: profile.store,
+              region: profile.region,
+              apo: profile.apo,
+              wins: Math.max(8, profile.streak + 2),
+              reward: profile.wallet,
+              isYou: true
+            });
+          } else {
+            rows.forEach((row) => {
+              if (row.name.toLowerCase() === `${profile.firstName} ${profile.lastName}`.toLowerCase()) {
+                row.isYou = true;
+              }
+            });
+          }
+        }
+
+        rows.sort((a, b) => b.apo - a.apo);
+        return rows.map((row, index) => ({
+          ...row,
+          rank: index + 1,
+          isYou: row.isYou || false
+        }));
+      }
+
+      function setAuthMode(mode) {
+        state.authMode = mode;
+        saveState();
+        render();
+      }
+
+      function loginProfile(profileId) {
+        state.currentProfileId = profileId;
+        state.activeSection = "dashboard";
+        state.leaderboardRole = getProfile()?.role || "sd";
+        state.modal = null;
+        saveState();
+        render();
+      }
+
+      function createProfile(formData) {
+        const firstName = String(formData.get("firstName") || "").trim();
+        const lastName = String(formData.get("lastName") || "").trim();
+        const email = String(formData.get("email") || "").trim().toLowerCase();
+        const role = String(formData.get("role") || "sd");
+        const store = String(formData.get("store") || "MobileLink Store").trim();
+        const profileId = email.replace(/[^a-z0-9]+/g, "-") || `demo-${Date.now()}`;
+
+        const templates = {
+          sd: { title: "Sales Development Rep", apo: 90.8, wallet: 145, earningsYtd: 2840, accessoryGp: 960, streak: 4, monthlyGoal: 95 },
+          tm: { title: "Territory Manager", apo: 93.2, wallet: 255, earningsYtd: 4620, accessoryGp: 1480, streak: 7, monthlyGoal: 96 },
+          manager: { title: "Store Manager", apo: 94.5, wallet: 335, earningsYtd: 5980, accessoryGp: 1820, streak: 10, monthlyGoal: 97 }
+        };
+
+        const seed = templates[role];
+        const trainingStatus = {};
+        trainingCatalog
+          .filter((item) => item.roles.includes(role))
+          .forEach((item, index) => {
+            trainingStatus[item.id] = index === 0 ? 32 : 0;
+          });
+
+        state.profiles[profileId] = {
+          id: profileId,
+          firstName: firstName || "New",
+          lastName: lastName || "Employee",
+          email,
+          role,
+          roleLabel: role === "sd" ? "SD Level" : role === "tm" ? "TM Level" : "Store Manager",
+          title: seed.title,
+          store,
+          region: "Assigned Region",
+          apo: seed.apo,
+          rank: 0,
+          streak: seed.streak,
+          wallet: seed.wallet,
+          earningsYtd: seed.earningsYtd,
+          accessoryGp: seed.accessoryGp,
+          monthlyGoal: seed.monthlyGoal,
+          avatar: `${(firstName[0] || "N").toUpperCase()}${(lastName[0] || "E").toUpperCase()}`,
+          trainingStatus,
+          bag: ["mag-power", "shield-pack"],
+          submissions: []
+        };
+
+        loginProfile(profileId);
+      }
+
+      function loginByEmail(email) {
+        const profile = Object.values(state.profiles).find((item) => item.email.toLowerCase() === email.toLowerCase());
+        if (!profile) {
+          alert("Demo note: that email is not in the mock directory yet. Use a demo persona or register a new account.");
+          return;
+        }
+        loginProfile(profile.id);
+      }
+
+      function setSection(sectionId) {
+        state.activeSection = sectionId;
+        saveState();
+        render();
+      }
+
+      function setLeaderboardRole(role) {
+        state.leaderboardRole = role;
+        saveState();
+        render();
+      }
+
+      function updateTraining(trainingId, progress) {
+        const profile = getProfile();
+        if (!profile) return;
+        profile.trainingStatus[trainingId] = progress;
+        if (progress >= 100) {
+          const training = trainingCatalog.find((item) => item.id === trainingId);
+          if (training) {
+            profile.wallet += training.reward;
+            profile.streak += 1;
+          }
+        }
+        saveState();
+        render();
+      }
+
+      function toggleBagItem(itemId) {
+        const profile = getProfile();
+        if (!profile) return;
+        const exists = profile.bag.includes(itemId);
+        if (exists) {
+          profile.bag = profile.bag.filter((id) => id !== itemId);
+        } else {
+          profile.bag.push(itemId);
+        }
+        const totals = getBagTotals(profile);
+        profile.accessoryGp = totals.gp * 38;
+        saveState();
+        render();
+      }
+
+      function addSubmission(payload) {
+        const profile = getProfile();
+        if (!profile) return;
+        profile.submissions.unshift({
+          id: `sub-${Date.now()}`,
+          title: payload.title,
+          type: payload.type,
+          status: "Pending review",
+          reward: payload.reward,
+          note: payload.note
+        });
+        profile.wallet += 25;
+        saveState();
+        closeModal();
+        render();
+      }
+
+      function openModal(modal) {
+        state.modal = modal;
+        saveState();
+        renderModal();
+      }
+
+      function closeModal() {
+        state.modal = null;
+        saveState();
+        renderModal();
+      }
+
+      function renderAuthFields() {
+        const mount = document.getElementById("authFields");
+        const title = document.getElementById("authTitle");
+        const copy = document.getElementById("authCopy");
+        const submit = document.getElementById("authSubmit");
+        const helper = document.getElementById("authHelper");
+        const loginMode = state.authMode === "login";
+
+        document.querySelectorAll(".auth-tab").forEach((tab) => {
+          tab.classList.toggle("active", tab.dataset.mode === state.authMode);
+        });
+
+        if (loginMode) {
+          title.textContent = "Welcome back";
+          copy.textContent = "Sign in to preview a personalized dashboard experience.";
+          submit.textContent = "Enter portal";
+          helper.textContent = "For demo mode, use a quick persona or log in with any existing demo email.";
+          mount.innerHTML = `
+            <label class="field full">
+              <span class="label">Email</span>
+              <input class="input" name="email" type="email" placeholder="ariana@mobilelink.demo" required />
+            </label>
+            <label class="field full">
+              <span class="label">Password</span>
+              <input class="input" name="password" type="password" placeholder="Demo only" required />
+            </label>
+          `;
+        } else {
+          title.textContent = "Create a demo employee profile";
+          copy.textContent = "This simulates registration, onboarding, and a role-specific home experience.";
+          submit.textContent = "Create account";
+          helper.textContent = "Registration is mocked locally so you can test personalized flows without a live backend.";
+          mount.innerHTML = `
+            <label class="field">
+              <span class="label">First name</span>
+              <input class="input" name="firstName" type="text" placeholder="Jordan" required />
+            </label>
+            <label class="field">
+              <span class="label">Last name</span>
+              <input class="input" name="lastName" type="text" placeholder="Lane" required />
+            </label>
+            <label class="field full">
+              <span class="label">Email</span>
+              <input class="input" name="email" type="email" placeholder="jordan@mobilelink.com" required />
+            </label>
+            <label class="field">
+              <span class="label">Role</span>
+              <select class="select" name="role">
+                <option value="sd">SD Level</option>
+                <option value="tm">TM Level</option>
+                <option value="manager">Store Manager</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="label">Store</span>
+              <input class="input" name="store" type="text" placeholder="Sugar Land Flagship" required />
+            </label>
+            <label class="field full">
+              <span class="label">Password</span>
+              <input class="input" name="password" type="password" placeholder="Create a password" required />
+            </label>
+          `;
+        }
+      }
+
+      function renderQuickGrid() {
+        const mount = document.getElementById("quickGrid");
+        mount.innerHTML = demoProfiles
+          .map(
+            (profile) => `
+              <button class="quick-btn" data-action="seed-demo-user" data-user-id="${profile.id}">
+                <div class="quick-meta">
+                  <strong>${escapeHtml(profile.firstName)} ${escapeHtml(profile.lastName)}</strong>
+                  <div class="muted">${escapeHtml(profile.roleLabel)} • ${escapeHtml(profile.store)}</div>
+                </div>
+                <span class="quick-pill">${percent(profile.apo)} APO</span>
+              </button>
+            `
+          )
+          .join("");
+      }
+
+      function renderSidebar() {
+        const navMount = document.getElementById("navMount");
+        navMount.innerHTML = navItems
+          .map(
+            (item) => `
+              <button class="nav-btn ${state.activeSection === item.id ? "active" : ""}" data-action="nav" data-section="${item.id}">
+                <span>${item.label}</span>
+                <span class="nav-tag">${item.tag}</span>
+              </button>
+            `
+          )
+          .join("");
+
+        const profile = getProfile();
+        const sidebarProfile = document.getElementById("sidebarProfile");
+        const leaderboard = getLeaderboard(profile.role);
+        const myRank = leaderboard.find((row) => row.isYou)?.rank || profile.rank || "-";
+        sidebarProfile.innerHTML = `
+          <div class="avatar">${escapeHtml(profile.avatar)}</div>
+          <h3>${escapeHtml(profile.firstName)} ${escapeHtml(profile.lastName)}</h3>
+          <div class="muted">${escapeHtml(profile.title)} • ${escapeHtml(profile.store)}</div>
+          <div class="meta-row">
+            <span>${escapeHtml(profile.roleLabel)}</span>
+            <span>Rank #${myRank}</span>
+          </div>
+          <div class="progress-wrap">
+            <div class="label">Monthly APO pace</div>
+            <div class="progress-track">
+              <div class="progress-bar" style="width: ${Math.min(100, profile.apo)}%"></div>
+            </div>
+          </div>
+        `;
+      }
+
+      function renderTopbar() {
+        const profile = getProfile();
+        const leaderboard = getLeaderboard(profile.role);
+        const myRank = leaderboard.find((row) => row.isYou)?.rank || profile.rank || "-";
+        const topbar = document.getElementById("topbarMount");
+
+        topbar.innerHTML = `
+          <div class="topbar-grid">
+            <div class="greeting">
+              <h2>Hey, ${escapeHtml(profile.firstName)}.</h2>
+              <p>${escapeHtml(profile.roleLabel)} view • ${escapeHtml(profile.store)} • Personalized progress and rewards are live in this demo.</p>
+            </div>
+            <div class="topbar-meta">
+              <div class="meta-pill"><strong>${percent(profile.apo)}</strong> APO</div>
+              <div class="meta-pill"><strong>#${myRank}</strong> role rank</div>
+              <div class="meta-pill"><strong>${currency(profile.wallet)}</strong> reward wallet</div>
+              <div class="meta-pill"><strong>Apr 8</strong> next APO import</div>
+            </div>
+          </div>
+        `;
+      }
+
+      function renderDashboard() {
+        const profile = getProfile();
+        const assigned = getAssignedTrainings(profile);
+        const nextTraining = assigned.find((item) => getTrainingCompletion(profile, item.id) < 100) || assigned[0];
+        const leaderboard = getLeaderboard(profile.role);
+        const myRank = leaderboard.find((row) => row.isYou)?.rank || profile.rank || "-";
+        const totals = getBagTotals(profile);
+
+        return `
+          <section class="hero-banner">
+            <article class="panel headline-card">
+              <span class="mini-tag">Portal home</span>
+              <h3 class="section-title">One clean dashboard for leaderboard energy, training momentum, and creator rewards.</h3>
+              <p class="muted">
+                This is the landing experience each employee sees after login. It greets them by name, shows where they stand,
+                and nudges them to their next action.
+              </p>
+              <div class="headline-actions">
+                <button class="btn" data-action="nav" data-section="leaderboard">View leaderboard</button>
+                <button class="ghost-btn" data-action="nav" data-section="training">Continue training</button>
+                <button class="soft-btn" data-action="open-link-modal" data-link-key="accessoryBuilder">Open builder link</button>
+              </div>
+            </article>
+
+            <article class="panel stack">
+              <div>
+                <span class="chip info">Live now</span>
+                <h3 class="card-title">Your score pulse</h3>
+              </div>
+              <div class="mini-chart">
+                <div class="chart-row">
+                  <div class="muted">APO pace</div>
+                  <div class="bar-track"><div class="bar-fill" style="width: ${Math.min(100, profile.apo)}%"></div></div>
+                  <div>${percent(profile.apo)}</div>
+                </div>
+                <div class="chart-row">
+                  <div class="muted">Training done</div>
+                  <div class="bar-track"><div class="bar-fill" style="width: ${averageTrainingProgress(profile)}%"></div></div>
+                  <div>${averageTrainingProgress(profile)}%</div>
+                </div>
+                <div class="chart-row">
+                  <div class="muted">Wallet goal</div>
+                  <div class="bar-track"><div class="bar-fill" style="width: ${Math.min(100, Math.round((profile.wallet / 600) * 100))}%"></div></div>
+                  <div>${currency(profile.wallet)}</div>
+                </div>
+              </div>
+              <div class="task-item">
+                <strong>Next best move</strong>
+                <div class="muted">Finish ${escapeHtml(nextTraining.title)} to unlock ${currency(nextTraining.reward)} and push your rank higher.</div>
+              </div>
+            </article>
+          </section>
+
+          <section class="stat-grid">
+            <article class="stat-card">
+              <span class="label">Role rank</span>
+              <div class="stat-value">#${myRank}</div>
+              <div class="trend">Based on latest APO import</div>
+            </article>
+            <article class="stat-card">
+              <span class="label">Reward wallet</span>
+              <div class="stat-value">${currency(profile.wallet)}</div>
+              <div class="trend">${plural(profile.submissions.length, "active submission")}</div>
+            </article>
+            <article class="stat-card">
+              <span class="label">Accessory bag GP</span>
+              <div class="stat-value">${currency(totals.gp)}</div>
+              <div class="trend">${getBagItems(profile).length} items in your stack</div>
+            </article>
+            <article class="stat-card">
+              <span class="label">Training streak</span>
+              <div class="stat-value">${profile.streak}</div>
+              <div class="trend">${averageTrainingProgress(profile)}% total completion</div>
+            </article>
+          </section>
+
+          <section class="split-grid">
+            <article class="panel">
+              <div class="section-head">
+                <div>
+                  <span class="mini-tag">Leaderboard snapshot</span>
+                  <h3 class="section-title">Your role board</h3>
+                </div>
+                <button class="ghost-btn" data-action="nav" data-section="leaderboard">Full rankings</button>
+              </div>
+              ${renderBoardRows(profile.role, 4)}
+            </article>
+
+            <article class="panel stack">
+              <div>
+                <span class="mini-tag">Training highlight</span>
+                <h3 class="section-title">${escapeHtml(nextTraining.title)}</h3>
+                <p class="muted">${escapeHtml(nextTraining.description)}</p>
+              </div>
+              <div class="progress-wrap">
+                <div class="label">Current progress</div>
+                <div class="progress-track">
+                  <div class="progress-bar" style="width: ${getTrainingCompletion(profile, nextTraining.id)}%"></div>
+                </div>
+              </div>
+              <div class="meta-row">
+                <span>${nextTraining.minutes} min</span>
+                <span>${currency(nextTraining.reward)} reward</span>
+                <span>${escapeHtml(nextTraining.focus)}</span>
+              </div>
+              <button class="btn" data-action="open-training" data-training-id="${nextTraining.id}">Open training</button>
+            </article>
+          </section>
+
+          <section class="reward-grid">
+            ${rewardCards
+              .map(
+                (item) => `
+                  <article class="reward-card">
+                    <span class="chip good">${escapeHtml(item.payout)}</span>
+                    <h3 class="card-title">${escapeHtml(item.title)}</h3>
+                    <p class="muted">${escapeHtml(item.note)}</p>
+                  </article>
+                `
+              )
+              .join("")}
+          </section>
+        `;
+      }
+
+      function renderBoardRows(role, limit) {
+        const board = getLeaderboard(role).slice(0, limit);
+        return `
+          <div class="board-table">
+            ${board
+              .map(
+                (row) => `
+                  <div class="board-row ${row.isYou ? "you" : ""}">
+                    <div class="board-cell">
+                      <div class="board-label">Rank</div>
+                      <strong>#${row.rank}</strong>
+                    </div>
+                    <div class="board-cell">
+                      <strong>${escapeHtml(row.name)} ${row.isYou ? "(You)" : ""}</strong>
+                      <div class="muted">${escapeHtml(row.store)} • ${escapeHtml(row.region)}</div>
+                    </div>
+                    <div class="board-cell">
+                      <div class="board-label">APO</div>
+                      <strong>${percent(row.apo)}</strong>
+                    </div>
+                    <div class="board-cell">
+                      <div class="board-label">Wins</div>
+                      <strong>${row.wins}</strong>
+                    </div>
+                    <div class="board-cell">
+                      <div class="board-label">Rewards</div>
+                      <strong>${currency(row.reward)}</strong>
+                    </div>
+                  </div>
+                `
+              )
+              .join("")}
+          </div>
+        `;
+      }
+
+      function renderLeaderboard() {
+        const role = state.leaderboardRole;
+        const board = getLeaderboard(role);
+        const topThree = board.slice(0, 3);
+
+        return `
+          <section class="panel">
+            <div class="section-head">
+              <div>
+                <span class="mini-tag">APO leaderboard</span>
+                <h3 class="section-title">Rankings by role</h3>
+                <p class="muted">This can be refreshed every two days from an import file or direct data source.</p>
+              </div>
+              <div class="tabs">
+                <button class="tab-btn ${role === "sd" ? "active" : ""}" data-action="leaderboard-role" data-role="sd">SD Level</button>
+                <button class="tab-btn ${role === "tm" ? "active" : ""}" data-action="leaderboard-role" data-role="tm">TM Level</button>
+                <button class="tab-btn ${role === "manager" ? "active" : ""}" data-action="leaderboard-role" data-role="manager">Store Manager</button>
+              </div>
+            </div>
+
+            <div class="podium">
+              ${topThree
+                .map(
+                  (row, index) => `
+                    <article class="podium-card">
+                      <span class="podium-rank rank-${index + 1}">#${index + 1} ${index === 0 ? "leader" : index === 1 ? "hot" : "rising"}</span>
+                      <h3 class="card-title">${escapeHtml(row.name)}</h3>
+                      <div class="muted">${escapeHtml(row.store)} • ${escapeHtml(row.region)}</div>
+                      <div class="stat-value">${percent(row.apo)}</div>
+                      <div class="meta-row">
+                        <span>${row.wins} wins</span>
+                        <span>${currency(row.reward)} rewards</span>
+                      </div>
+                    </article>
+                  `
+                )
+                .join("")}
+            </div>
+
+            ${renderBoardRows(role)}
+
+            <div class="button-row">
+              <button class="btn" data-action="open-import-modal">Preview APO import flow</button>
+              <button class="ghost-btn" data-action="nav" data-section="training">Jump to training</button>
+            </div>
+          </section>
+        `;
+      }
+
+      function renderTraining() {
+        const profile = getProfile();
+        const trainings = getAssignedTrainings(profile);
+
+        return `
+          <section class="section-head">
+            <div>
+              <span class="mini-tag">Training portal</span>
+              <h3 class="section-title">Assigned learning for ${escapeHtml(profile.firstName)}</h3>
+              <p class="muted">Track completions, store role-specific history, and route users into your full LMS when you are ready.</p>
+            </div>
+            <div class="button-row" style="margin-top:0;">
+              <button class="ghost-btn" data-action="open-link-modal" data-link-key="trainingHub">Open full training link</button>
+            </div>
+          </section>
+
+          <section class="training-grid">
+            ${trainings
+              .map((training) => {
+                const progress = getTrainingCompletion(profile, training.id);
+                const statusClass = progress >= 100 ? "good" : progress > 0 ? "info" : "warn";
+                const statusLabel = progress >= 100 ? "Completed" : progress > 0 ? "In progress" : "Assigned";
+                return `
+                  <article class="training-card">
+                    <header>
+                      <div>
+                        <span class="chip ${statusClass}">${statusLabel}</span>
+                        <h3 class="card-title">${escapeHtml(training.title)}</h3>
+                        <div class="muted">${escapeHtml(training.description)}</div>
+                      </div>
+                      <div class="chip">${training.minutes} min</div>
+                    </header>
+                    <div class="meta-row">
+                      <span>${escapeHtml(training.focus)}</span>
+                      <span>${currency(training.reward)} reward</span>
+                      <span>${training.lessons.length} lessons</span>
+                    </div>
+                    <div class="progress-wrap">
+                      <div class="label">Progress</div>
+                      <div class="progress-track">
+                        <div class="progress-bar" style="width: ${progress}%"></div>
+                      </div>
+                    </div>
+                    <ul class="task-list">
+                      ${training.takeaways
+                        .map(
+                          (item) => `
+                            <li class="task-item">
+                              <strong>${escapeHtml(item)}</strong>
+                            </li>
+                          `
+                        )
+                        .join("")}
+                    </ul>
+                    <div class="button-row">
+                      <button class="btn" data-action="open-training" data-training-id="${training.id}">
+                        ${progress >= 100 ? "Review training" : progress > 0 ? "Continue training" : "Start training"}
+                      </button>
+                      ${
+                        progress < 100
+                          ? `<button class="ghost-btn" data-action="complete-training" data-training-id="${training.id}">Mark complete</button>`
+                          : ""
+                      }
+                    </div>
+                  </article>
+                `;
+              })
+              .join("")}
+          </section>
+        `;
+      }
+
+      function renderUploads() {
+        const profile = getProfile();
+        return `
+          <section class="upload-grid">
+            <article class="panel">
+              <span class="mini-tag">Creator uploads</span>
+              <h3 class="section-title">Submit social, branding, and in-store content.</h3>
+              <p class="muted">
+                This module can live as its own native upload flow or point to your existing EW portal. The rewards callout keeps the incentive obvious.
+              </p>
+
+              <div class="portal-banner">
+                <strong>Current setup idea</strong>
+                <p class="muted">Use this page as the launch point, then deep-link the employee into the current EW upload portal with their identity prefilled.</p>
+                <div class="button-row">
+                  <button class="btn" data-action="open-upload-modal">Submit demo upload</button>
+                  <button class="ghost-btn" data-action="open-link-modal" data-link-key="ewPortal">Open EW portal link</button>
+                </div>
+              </div>
+
+              <ul class="reward-list">
+                <li class="reward-item">
+                  <strong>Quick clip reward</strong>
+                  <div class="muted">Short approved social clips can trigger instant cash-back or leaderboard shout-outs.</div>
+                </li>
+                <li class="reward-item">
+                  <strong>Brand challenge winner</strong>
+                  <div class="muted">Campaign-quality content can feed monthly contests and store-level creator bragging rights.</div>
+                </li>
+              </ul>
+            </article>
+
+            <article class="panel">
+              <span class="mini-tag">Your submission queue</span>
+              <h3 class="section-title">${escapeHtml(profile.firstName)}'s creator history</h3>
+              <div class="submission-list">
+                ${
+                  profile.submissions.length
+                    ? profile.submissions
+                        .map(
+                          (item) => `
+                            <div class="submission-item">
+                              <strong>${escapeHtml(item.title)}</strong>
+                              <div class="muted">${escapeHtml(item.type)} • ${escapeHtml(item.status)}</div>
+                              <div>${escapeHtml(item.reward)}</div>
+                              <div class="muted">${escapeHtml(item.note)}</div>
+                            </div>
+                          `
+                        )
+                        .join("")
+                    : `<div class="submission-item"><strong>No uploads yet</strong><div class="muted">Use the demo upload flow to add a submission and see the state update instantly.</div></div>`
+                }
+              </div>
+            </article>
+          </section>
+        `;
+      }
+
+      function renderBuilder() {
+        const profile = getProfile();
+        const totals = getBagTotals(profile);
+        const bagItems = getBagItems(profile);
+
+        return `
+          <section class="builder-grid">
+            <article class="panel">
+              <div class="section-head">
+                <div>
+                  <span class="mini-tag">Accessory builder</span>
+                  <h3 class="section-title">Build your own accessory portfolio</h3>
+                  <p class="muted">Keep the real builder as its own tool, but surface personal earnings and bag logic right here.</p>
+                </div>
+                <button class="ghost-btn" data-action="open-link-modal" data-link-key="accessoryBuilder">Open full builder</button>
+              </div>
+
+              <div class="builder-products">
+                ${accessoryCatalog
+                  .map((item) => {
+                    const active = profile.bag.includes(item.id);
+                    return `
+                      <article class="product-card">
+                        <span class="chip ${active ? "good" : ""}">${active ? "In your bag" : escapeHtml(item.category)}</span>
+                        <strong>${escapeHtml(item.name)}</strong>
+                        <div class="muted">${escapeHtml(item.vibe)}</div>
+                        <div class="price-strip">
+                          <span>GP ${currency(item.gp)}</span>
+                          <span>Commission ${currency(item.commission)}</span>
+                        </div>
+                        <div class="button-row">
+                          <button class="${active ? "ghost-btn" : "btn"}" data-action="toggle-bag" data-item-id="${item.id}">
+                            ${active ? "Remove" : "Add to bag"}
+                          </button>
+                        </div>
+                      </article>
+                    `;
+                  })
+                  .join("")}
+              </div>
+            </article>
+
+            <article class="panel stack">
+              <div>
+                <span class="chip info">Your numbers</span>
+                <h3 class="section-title">Earnings snapshot</h3>
+              </div>
+              <div class="stat-grid" style="grid-template-columns:1fr 1fr;">
+                <div class="stat-card">
+                  <span class="label">Current bag GP</span>
+                  <div class="stat-value">${currency(totals.gp)}</div>
+                </div>
+                <div class="stat-card">
+                  <span class="label">Current commission</span>
+                  <div class="stat-value">${currency(totals.commission)}</div>
+                </div>
+                <div class="stat-card">
+                  <span class="label">YTD accessory GP</span>
+                  <div class="stat-value">${currency(profile.accessoryGp)}</div>
+                </div>
+                <div class="stat-card">
+                  <span class="label">YTD earnings</span>
+                  <div class="stat-value">${currency(profile.earningsYtd)}</div>
+                </div>
+              </div>
+
+              <ul class="bag-list">
+                ${
+                  bagItems.length
+                    ? bagItems
+                        .map(
+                          (item) => `
+                            <li class="bag-item">
+                              <strong>${escapeHtml(item.name)}</strong>
+                              <div class="muted">${escapeHtml(item.category)} • GP ${currency(item.gp)} • Commission ${currency(item.commission)}</div>
+                            </li>
+                          `
+                        )
+                        .join("")
+                    : `<li class="bag-item"><strong>Your bag is empty</strong><div class="muted">Tap products on the left to simulate a personalized accessory portfolio.</div></li>`
+                }
+              </ul>
+            </article>
+          </section>
+        `;
+      }
+
+      function averageTrainingProgress(profile) {
+        const trainings = getAssignedTrainings(profile);
+        if (!trainings.length) return 0;
+        const total = trainings.reduce((sum, item) => sum + getTrainingCompletion(profile, item.id), 0);
+        return Math.round(total / trainings.length);
+      }
+
+      function renderContent() {
+        const mount = document.getElementById("contentMount");
+        let html = "";
+
+        if (state.activeSection === "dashboard") html = renderDashboard();
+        if (state.activeSection === "leaderboard") html = renderLeaderboard();
+        if (state.activeSection === "training") html = renderTraining();
+        if (state.activeSection === "uploads") html = renderUploads();
+        if (state.activeSection === "builder") html = renderBuilder();
+
+        mount.innerHTML = html;
+      }
+
+      function renderModal() {
+        const backdrop = document.getElementById("modalBackdrop");
+        const card = document.getElementById("modalCard");
+        const modal = state.modal;
+
+        if (!modal) {
+          backdrop.classList.add("hidden");
+          card.innerHTML = "";
+          return;
+        }
+
+        backdrop.classList.remove("hidden");
+
+        if (modal.type === "training") {
+          const profile = getProfile();
+          const training = trainingCatalog.find((item) => item.id === modal.trainingId);
+          const progress = getTrainingCompletion(profile, modal.trainingId);
+          card.innerHTML = `
+            <div class="modal-top">
+              <div>
+                <span class="chip info">${progress >= 100 ? "Completed" : "Training preview"}</span>
+                <h3 class="modal-title">${escapeHtml(training.title)}</h3>
+                <p class="muted">${escapeHtml(training.description)}</p>
+              </div>
+              <button class="close-btn" data-action="close-modal">X</button>
+            </div>
+            <div class="modal-body modal-grid">
+              <div class="duo-grid">
+                <div class="task-item">
+                  <strong>Focus</strong>
+                  <div class="muted">${escapeHtml(training.focus)}</div>
+                </div>
+                <div class="task-item">
+                  <strong>Reward</strong>
+                  <div class="muted">${currency(training.reward)} plus streak credit</div>
+                </div>
+              </div>
+              <div class="progress-wrap">
+                <div class="label">Completion</div>
+                <div class="progress-track">
+                  <div class="progress-bar" style="width: ${progress}%"></div>
+                </div>
+              </div>
+              <ul class="lesson-list">
+                ${training.lessons
+                  .map(
+                    (lesson, index) => `
+                      <li class="lesson-item">
+                        <div>
+                          <strong>Lesson ${index + 1}</strong>
+                          <div class="muted">${escapeHtml(lesson)}</div>
+                        </div>
+                        <span class="chip ${index < Math.floor(progress / 25) ? "good" : ""}">${index < Math.floor(progress / 25) ? "Done" : "Next"}</span>
+                      </li>
+                    `
+                  )
+                  .join("")}
+              </ul>
+              <div class="button-row">
+                ${
+                  progress < 100
+                    ? `<button class="btn" data-action="complete-training" data-training-id="${training.id}">Mark training complete</button>`
+                    : `<button class="btn" data-action="close-modal">Back to portal</button>`
+                }
+                <button class="ghost-btn" data-action="close-modal">Close</button>
+              </div>
+              <div class="footer-note">In production, this modal could hand off to full lesson pages, quizzes, certificates, and manager reporting.</div>
+            </div>
+          `;
+        }
+
+        if (modal.type === "upload") {
+          card.innerHTML = `
+            <div class="modal-top">
+              <div>
+                <span class="chip info">Demo upload</span>
+                <h3 class="modal-title">Submit a creator asset</h3>
+                <p class="muted">This simulates the upload flow before routing into your real EW portal.</p>
+              </div>
+              <button class="close-btn" data-action="close-modal">X</button>
+            </div>
+            <div class="modal-body">
+              <form id="uploadForm" class="modal-grid">
+                <div class="duo-grid">
+                  <label class="field">
+                    <span class="label">Asset title</span>
+                    <input class="input" type="text" name="title" placeholder="Accessory stack reel" required />
+                  </label>
+                  <label class="field">
+                    <span class="label">Type</span>
+                    <select class="select" name="type">
+                      <option>Social clip</option>
+                      <option>Brand story</option>
+                      <option>In-store demo</option>
+                      <option>Training video</option>
+                    </select>
+                  </label>
+                </div>
+                <label class="field">
+                  <span class="label">Notes</span>
+                  <textarea class="textarea" name="note" placeholder="What makes this content useful or reward-worthy?"></textarea>
+                </label>
+                <div class="duo-grid">
+                  <label class="field">
+                    <span class="label">Potential reward</span>
+                    <select class="select" name="reward">
+                      <option>$50 potential</option>
+                      <option>$75 potential</option>
+                      <option>$150 campaign pick</option>
+                      <option>$250 contest entry</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span class="label">File placeholder</span>
+                    <input class="input" type="text" value="demo-video.mp4" readonly />
+                  </label>
+                </div>
+                <div class="button-row">
+                  <button class="btn" type="submit">Add demo submission</button>
+                  <button class="ghost-btn" type="button" data-action="close-modal">Cancel</button>
+                </div>
+              </form>
+            </div>
+          `;
+        }
+
+        if (modal.type === "link") {
+          const item = linkMap[modal.linkKey];
+          card.innerHTML = `
+            <div class="modal-top">
+              <div>
+                <span class="chip warn">External link placeholder</span>
+                <h3 class="modal-title">${escapeHtml(item.title)}</h3>
+                <p class="muted">${escapeHtml(item.copy)}</p>
+              </div>
+              <button class="close-btn" data-action="close-modal">X</button>
+            </div>
+            <div class="modal-body modal-grid">
+              <div class="task-item">
+                <strong>Suggested URL</strong>
+                <div class="muted">${escapeHtml(item.url)}</div>
+              </div>
+              <div class="button-row">
+                <a class="btn" href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">Open placeholder</a>
+                <button class="ghost-btn" data-action="close-modal">Close</button>
+              </div>
+            </div>
+          `;
+        }
+
+        if (modal.type === "import") {
+          card.innerHTML = `
+            <div class="modal-top">
+              <div>
+                <span class="chip info">APO import flow</span>
+                <h3 class="modal-title">How the leaderboard could update every 2 days</h3>
+                <p class="muted">This is the simplest admin workflow for an MVP.</p>
+              </div>
+              <button class="close-btn" data-action="close-modal">X</button>
+            </div>
+            <div class="modal-body modal-grid">
+              <div class="task-item">
+                <strong>Step 1</strong>
+                <div class="muted">Export APO file from the source system with employee ID, role, store, region, and APO score.</div>
+              </div>
+              <div class="task-item">
+                <strong>Step 2</strong>
+                <div class="muted">Upload CSV into an admin page or Firebase Function that writes a new leaderboard snapshot.</div>
+              </div>
+              <div class="task-item">
+                <strong>Step 3</strong>
+                <div class="muted">The portal reads the newest snapshot and instantly re-ranks SD, TM, and Store Manager boards.</div>
+              </div>
+              <div class="task-item">
+                <strong>Step 4</strong>
+                <div class="muted">Each employee sees their personal row highlighted at login along with rewards and training nudges.</div>
+              </div>
+              <div class="footer-note">Firebase is more than enough for this scale. The important part is matching imported APO rows to employee accounts correctly.</div>
+            </div>
+          `;
+        }
+      }
+
+      function render() {
+        renderAuthFields();
+        renderQuickGrid();
+
+        const authScreen = document.getElementById("authScreen");
+        const appShell = document.getElementById("appShell");
+
+        if (!state.currentProfileId) {
+          authScreen.classList.remove("hidden");
+          appShell.classList.add("hidden");
+          renderModal();
+          return;
+        }
+
+        authScreen.classList.add("hidden");
+        appShell.classList.remove("hidden");
+        renderSidebar();
+        renderTopbar();
+        renderContent();
+        renderModal();
+      }
+
+      document.addEventListener("click", (event) => {
+        const target = event.target.closest("[data-action]");
+        if (!target) return;
+
+        const action = target.dataset.action;
+
+        if (action === "auth-mode") setAuthMode(target.dataset.mode);
+        if (action === "seed-demo-user") loginProfile(target.dataset.userId);
+        if (action === "nav") setSection(target.dataset.section);
+        if (action === "leaderboard-role") setLeaderboardRole(target.dataset.role);
+        if (action === "open-training") openModal({ type: "training", trainingId: target.dataset.trainingId });
+        if (action === "complete-training") updateTraining(target.dataset.trainingId, 100);
+        if (action === "open-upload-modal") openModal({ type: "upload" });
+        if (action === "toggle-bag") toggleBagItem(target.dataset.itemId);
+        if (action === "open-link-modal") openModal({ type: "link", linkKey: target.dataset.linkKey });
+        if (action === "open-import-modal") openModal({ type: "import" });
+        if (action === "close-modal") closeModal();
+        if (action === "logout") {
+          state.currentProfileId = null;
+          state.modal = null;
+          saveState();
+          render();
+        }
+      });
+
+      document.addEventListener("submit", (event) => {
+        if (event.target.id === "authForm") {
+          event.preventDefault();
+          const formData = new FormData(event.target);
+          if (state.authMode === "login") {
+            loginByEmail(String(formData.get("email") || ""));
+          } else {
+            createProfile(formData);
+          }
+        }
+
+        if (event.target.id === "uploadForm") {
+          event.preventDefault();
+          const formData = new FormData(event.target);
+          addSubmission({
+            title: String(formData.get("title") || "Untitled asset"),
+            type: String(formData.get("type") || "Social clip"),
+            note: String(formData.get("note") || "Added from demo flow."),
+            reward: String(formData.get("reward") || "$50 potential")
+          });
+        }
+      });
+
+      document.getElementById("modalBackdrop").addEventListener("click", (event) => {
+        if (event.target.id === "modalBackdrop") closeModal();
+      });
+
+      render();
+    </script>
+  </body>
+</html>
