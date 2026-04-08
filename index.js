@@ -5,9 +5,18 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import fastifyFormBody from '@fastify/formbody';
 import fastifyWs from '@fastify/websocket';
+import { createClient } from '@supabase/supabase-js';
 
 // Load environment variables from .env file
 dotenv.config();
+
+const SUPABASE_URL = process.env.SUPABASE_URL || '';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const KNOWLEDGE_CLIENT_ID = process.env.KNOWLEDGE_CLIENT_ID || 'mobilelink';
+
+const supabase = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
+  ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+  : null;
 
 // Retrieve environment variables
 const {
@@ -288,6 +297,219 @@ try {
   console.log('✅ Loaded EW enterprise knowledge');
 } catch (e) {
   console.log('⚠️ Could not load knowledge/ew_enterprise.md');
+}
+
+const KNOWLEDGE_SIMILARITY_THRESHOLD = 0.42;
+const KNOWLEDGE_MAX_MATCHES = 4;
+const KNOWLEDGE_MAX_SNIPPETS = 3;
+
+function buildBaseInstructions() {
+  return (
+    SYSTEM_MESSAGE +
+    '\n\n============================\nEW CORE COMPANY + POLICIES\n============================\n' +
+    EW_CORE_CARD +
+    '\n\n============================\nEW ENTERPRISE STRATEGIC INTELLIGENCE\n============================\n' +
+    EW_ENTERPRISE_CARD +
+    '\n\n============================\nINTERNAL PRODUCT SUPPORT CARD: PLAY FORCE\n============================\n' +
+    PLAYFORCE_SUPPORT_CARD
+  );
+}
+
+function buildResponseInstructions(knowledgeText = '') {
+  let instructions =
+    buildBaseInstructions() +
+    '\n\nLIVE CALL RULES:\n' +
+    '- For normal receptionist, routing, sales, wholesale, complaint, or general company questions, respond normally using the base Electronic World knowledge.\n' +
+    '- Only use manual knowledge when it clearly matches the caller\'s product or troubleshooting issue.\n' +
+    '- Never mention databases, retrieval, Supabase, vector search, or internal systems.\n' +
+    '- If the manual context is incomplete or unclear, ask one short clarifying question before giving steps.\n' +
+    '- Keep answers natural and human. Do not dump long technical text unless the caller specifically asks for it.';
+
+  if (knowledgeText) {
+    instructions +=
+      '\n\n============================\nLIVE RETRIEVED MANUAL KNOWLEDGE\n============================\n' +
+      knowledgeText;
+  }
+
+  return instructions;
+}
+
+function normalizeRoutingText(value = '') {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function shouldUseKnowledgeRetrieval(text, supportMode = false) {
+  const normalized = normalizeRoutingText(text);
+
+  if (!normalized) return false;
+
+  const supportKeywords = [
+    'troubleshoot',
+    'troubleshooting',
+    'setup',
+    'set up',
+    'manual',
+    'instructions',
+    'pair',
+    'pairing',
+    'connect',
+    'connection',
+    'bluetooth',
+    'charging',
+    'charge',
+    'not charging',
+    'not working',
+    'wont work',
+    'won t work',
+    'wont pair',
+    'won t pair',
+    'reset',
+    'sync',
+    'speaker',
+    'controller',
+    'headphones',
+    'earbuds',
+    'soundbar',
+    'remote',
+    'battery',
+    'power',
+    'device',
+    'firmware',
+    'button',
+    'usb',
+    'aux',
+    'led',
+    'red light',
+    'blue light',
+    'flashing',
+    'blinking',
+    'iphone',
+    'android',
+    'pc',
+    'ps4',
+    'ps5',
+    'xbox'
+  ];
+
+  const routingKeywords = [
+    'wholesale',
+    'dealer',
+    'bulk',
+    'sales',
+    'business inquiry',
+    'business question',
+    'pricing',
+    'quote',
+    'representative',
+    'speak to someone',
+    'speak to a person',
+    'speak with someone',
+    'manager',
+    'callback',
+    'call me back',
+    'store complaint',
+    'complaint',
+    'hours',
+    'location',
+    'address'
+  ];
+
+  const hasSupportKeyword = supportKeywords.some((keyword) => normalized.includes(keyword));
+  const hasRoutingKeyword = routingKeywords.some((keyword) => normalized.includes(keyword));
+
+  if (hasSupportKeyword) return true;
+  if (hasRoutingKeyword) return false;
+
+  if (supportMode) {
+    const shortBackchannels = [
+      'yes',
+      'yeah',
+      'yep',
+      'ok',
+      'okay',
+      'no',
+      'nah',
+      'correct',
+      'right',
+      'got it',
+      'i did that',
+      'done',
+      'thanks'
+    ];
+
+    if (shortBackchannels.includes(normalized)) {
+      return false;
+    }
+
+    return normalized.length >= 8;
+  }
+
+  return false;
+}
+
+async function createEmbedding(input) {
+  const response = await fetch('https://api.openai.com/v1/embeddings', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'text-embedding-3-small',
+      input
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Embedding request failed: ${response.status} ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data.data?.[0]?.embedding || null;
+}
+
+async function getRelevantKnowledge(query) {
+  if (!supabase) {
+    return '';
+  }
+
+  const cleanedQuery = String(query || '').trim();
+  if (!cleanedQuery) {
+    return '';
+  }
+
+  const queryEmbedding = await createEmbedding(cleanedQuery);
+  if (!queryEmbedding) {
+    return '';
+  }
+
+  const { data, error } = await supabase.rpc('match_documents', {
+    query_embedding: queryEmbedding,
+    match_count: KNOWLEDGE_MAX_MATCHES,
+    filter: { client_id: KNOWLEDGE_CLIENT_ID }
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  const filtered = (data || [])
+    .filter((item) => Number(item.similarity || 0) >= KNOWLEDGE_SIMILARITY_THRESHOLD)
+    .slice(0, KNOWLEDGE_MAX_SNIPPETS);
+
+  if (filtered.length === 0) {
+    return '';
+  }
+
+  return filtered
+    .map((item) => String(item.content || '').trim())
+    .filter(Boolean)
+    .join('\n\n');
 }
 
 const VOICE = 'marin';
@@ -1079,7 +1301,7 @@ fastify.post('/recording-status', async (request, reply) => {
     const polishedAnalysis = applyAnalysisPolish(analysis, callerPhone);
 
     const reportData = {
-logoUrl: process.env.REPORT_LOGO_URL || 'https://i.imgur.com/eYFsbtR.png',
+      logoUrl: process.env.REPORT_LOGO_URL || 'https://i.imgur.com/eYFsbtR.png',
       reportDate,
       callerName: polishedAnalysis.callerName || 'Unknown Caller',
       callerPhone: callerPhone || 'Unknown',
@@ -1180,17 +1402,13 @@ fastify.register(async (fastifyInstance) => {
     let lastAssistantItem = null;
     let markQueue = [];
     let responseStartTimestampTwilio = null;
+    let supportRetrievalMode = false;
+    let pendingSupportModeActivation = false;
 
     let callerPhone = 'Unknown';
     let callSid = 'Unknown';
 
-    const openAiWs = new WebSocket(`wss://api.openai.com/v1/realtime?model=gpt-realtime&temperature=${TEMPERATURE}`, {
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-      }
-    });
-
-    const initializeSession = () => {
+    const sendSessionUpdate = (manualResponseMode = false) => {
       const sessionUpdate = {
         type: 'session.update',
         session: {
@@ -1200,26 +1418,75 @@ fastify.register(async (fastifyInstance) => {
           audio: {
             input: {
               format: { type: 'audio/pcmu' },
-              turn_detection: { type: 'server_vad' }
+              transcription: { model: 'gpt-4o-mini-transcribe' },
+              turn_detection: {
+                type: 'server_vad',
+                create_response: !manualResponseMode
+              }
             },
             output: {
               format: { type: 'audio/pcmu' },
               voice: VOICE
             },
           },
-          instructions:
-            SYSTEM_MESSAGE +
-            '\n\n============================\nEW CORE COMPANY + POLICIES\n============================\n' +
-            EW_CORE_CARD +
-            '\n\n============================\nEW ENTERPRISE STRATEGIC INTELLIGENCE\n============================\n' +
-            EW_ENTERPRISE_CARD +
-            '\n\n============================\nINTERNAL PRODUCT SUPPORT CARD: PLAY FORCE\n============================\n' +
-            PLAYFORCE_SUPPORT_CARD,
+          instructions: buildBaseInstructions(),
         },
       };
 
-      console.log('Sending session update');
+      console.log(`Sending session update (manualResponseMode=${manualResponseMode})`);
       openAiWs.send(JSON.stringify(sessionUpdate));
+    };
+
+    const sendResponseForTurn = async (userText, retrieveKnowledge = false) => {
+      try {
+        const knowledge = retrieveKnowledge ? await getRelevantKnowledge(userText) : '';
+
+        const responseCreate = {
+          type: 'response.create',
+          response: {
+            modalities: ['audio'],
+            instructions: buildResponseInstructions(knowledge)
+          }
+        };
+
+        openAiWs.send(JSON.stringify(responseCreate));
+      } catch (err) {
+        console.error('❌ Knowledge retrieval failed. Falling back to base instructions:', err);
+
+        const fallbackResponse = {
+          type: 'response.create',
+          response: {
+            modalities: ['audio'],
+            instructions: buildResponseInstructions('')
+          }
+        };
+
+        openAiWs.send(JSON.stringify(fallbackResponse));
+      }
+    };
+
+    const handleCallerTurn = (userText) => {
+      const shouldRetrieveForThisTurn = shouldUseKnowledgeRetrieval(userText, supportRetrievalMode);
+
+      if (!supportRetrievalMode && shouldRetrieveForThisTurn) {
+        pendingSupportModeActivation = true;
+        console.log('🧠 Support/manual mode will activate after the current response finishes.');
+        return;
+      }
+
+      if (supportRetrievalMode && openAiWs.readyState === WebSocket.OPEN) {
+        void sendResponseForTurn(userText, shouldRetrieveForThisTurn);
+      }
+    };
+
+    const openAiWs = new WebSocket(`wss://api.openai.com/v1/realtime?model=gpt-realtime&temperature=${TEMPERATURE}`, {
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+      }
+    });
+
+    const initializeSession = () => {
+      sendSessionUpdate(false);
     };
 
     const handleSpeechStartedEvent = () => {
@@ -1276,6 +1543,15 @@ fastify.register(async (fastifyInstance) => {
           console.log(`Received event: ${response.type}`);
         }
 
+        if (response.type === 'response.done') {
+          if (pendingSupportModeActivation && !supportRetrievalMode && openAiWs.readyState === WebSocket.OPEN) {
+            supportRetrievalMode = true;
+            pendingSupportModeActivation = false;
+            console.log('🧠 Support/manual mode activated for subsequent turns on this call.');
+            sendSessionUpdate(true);
+          }
+        }
+
         if (response.type === 'response.audio_transcript.done' && response.transcript) {
           const text = String(response.transcript).trim();
           if (text) {
@@ -1289,6 +1565,7 @@ fastify.register(async (fastifyInstance) => {
           if (text) {
             console.log('CALLER TRANSCRIPT:', text);
             transcript.push(`Caller: ${text}`);
+            handleCallerTurn(text);
           }
         }
 
@@ -1353,6 +1630,8 @@ fastify.register(async (fastifyInstance) => {
 
             responseStartTimestampTwilio = null;
             latestMediaTimestamp = 0;
+            supportRetrievalMode = false;
+            pendingSupportModeActivation = false;
             break;
 
           case 'mark':
