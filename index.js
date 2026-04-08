@@ -1539,9 +1539,14 @@ fastify.register(async (fastifyInstance) => {
       try {
         const response = JSON.parse(data);
 
-        if (LOG_EVENT_TYPES.includes(response.type)) {
-          console.log(`Received event: ${response.type}`);
-        }
+if (LOG_EVENT_TYPES.includes(response.type)) {
+  console.log(`Received event: ${response.type}`);
+
+  if (response.type === 'error') {
+    console.log('OPENAI REALTIME ERROR FULL PAYLOAD:');
+    console.log(JSON.stringify(response, null, 2));
+  }
+}
 
         if (response.type === 'response.done') {
           if (pendingSupportModeActivation && !supportRetrievalMode && openAiWs.readyState === WebSocket.OPEN) {
