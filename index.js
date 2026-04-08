@@ -1452,6 +1452,12 @@ turn_detection: {
     const sendResponseForTurn = async (userText, retrieveKnowledge = false) => {
       try {
         const knowledge = retrieveKnowledge ? await getRelevantKnowledge(userText) : '';
+        console.log('==============================');
+console.log('LIVE USER QUERY:', userText);
+console.log('RETRIEVED KNOWLEDGE START');
+console.log(knowledge || '[NO KNOWLEDGE RETURNED]');
+console.log('RETRIEVED KNOWLEDGE END');
+console.log('==============================');
 
         const responseCreate = {
           type: 'response.create',
