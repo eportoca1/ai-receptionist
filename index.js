@@ -1501,7 +1501,6 @@ fastify.register(async (fastifyInstance) => {
     let markQueue = [];
     let responseStartTimestampTwilio = null;
     let supportRetrievalMode = false;
-    let pendingSupportModeActivation = false;
 
     let callerPhone = 'Unknown';
     let callSid = 'Unknown';
@@ -1571,9 +1570,12 @@ response: {
     const handleCallerTurn = (userText) => {
       const shouldRetrieveForThisTurn = shouldUseKnowledgeRetrieval(userText, supportRetrievalMode);
 
-      if (!supportRetrievalMode && shouldRetrieveForThisTurn) {
-        pendingSupportModeActivation = true;
-        console.log('🧠 Support/manual mode will activate after the current response finishes.');
+      if (!supportRetrievalMode && shouldRetrieveForThisTurn && openAiWs.readyState === WebSocket.OPEN) {
+        supportRetrievalMode = true;
+        console.log('🧠 Support/manual mode activated for this turn on this call.');
+        sendSessionUpdate(true);
+        openAiWs.send(JSON.stringify({ type: 'response.cancel' }));
+        void sendResponseForTurn(userText, true);
         return;
       }
 
@@ -1650,15 +1652,6 @@ if (LOG_EVENT_TYPES.includes(response.type)) {
     console.log(JSON.stringify(response, null, 2));
   }
 }
-
-        if (response.type === 'response.done') {
-          if (pendingSupportModeActivation && !supportRetrievalMode && openAiWs.readyState === WebSocket.OPEN) {
-            supportRetrievalMode = true;
-            pendingSupportModeActivation = false;
-            console.log('🧠 Support/manual mode activated for subsequent turns on this call.');
-            sendSessionUpdate(true);
-          }
-        }
 
         if (response.type === 'response.audio_transcript.done' && response.transcript) {
           const text = String(response.transcript).trim();
@@ -1739,7 +1732,6 @@ if (LOG_EVENT_TYPES.includes(response.type)) {
             responseStartTimestampTwilio = null;
             latestMediaTimestamp = 0;
             supportRetrievalMode = false;
-            pendingSupportModeActivation = false;
             break;
 
           case 'mark':
