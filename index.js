@@ -477,12 +477,15 @@ function extractProductCandidates(userText = '') {
 
   const candidates = new Set();
 
-  const cleaned = original
-    .replace(/\?/g, ' ')
-    .replace(/\./g, ' ')
-    .replace(/,/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const segments = original
+    .split(/[.?!]/)
+    .map((segment) =>
+      segment
+        .replace(/,/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+    )
+    .filter(Boolean);
 
   const patterns = [
     /called\s+(.+)$/i,
@@ -494,15 +497,17 @@ function extractProductCandidates(userText = '') {
     /familiar with\s+(.+)$/i
   ];
 
-  for (const pattern of patterns) {
-    const match = cleaned.match(pattern);
-    if (match && match[1]) {
-      let value = match[1]
-        .replace(/^(the|a|an)\s+/i, '')
-        .trim();
+  for (const segment of segments) {
+    for (const pattern of patterns) {
+      const match = segment.match(pattern);
+      if (match && match[1]) {
+        const value = match[1]
+          .replace(/^(the|a|an)\s+/i, '')
+          .trim();
 
-      if (value) {
-        candidates.add(value);
+        if (value) {
+          candidates.add(value);
+        }
       }
     }
   }
@@ -543,7 +548,14 @@ async function getRelevantKnowledge(query) {
     return '';
   }
 
-  const queryEmbedding = await createEmbedding(cleanedQuery);
+  const productCandidates = extractProductCandidates(cleanedQuery);
+  const bestProductCandidate =
+    productCandidates.find((candidate) => String(candidate || '').trim()) || '';
+  const retrievalQuery = bestProductCandidate || cleanedQuery;
+
+  console.log('KNOWLEDGE RETRIEVAL QUERY:', retrievalQuery);
+
+  const queryEmbedding = await createEmbedding(retrievalQuery);
   if (!queryEmbedding) {
     return '';
   }
@@ -565,8 +577,8 @@ async function getRelevantKnowledge(query) {
 if (filtered.length === 0) {
   console.log('⚠️ No embedding results, trying keyword fallback...');
 
-  const productCandidates = extractProductCandidates(cleanedQuery);
-  console.log('PRODUCT CANDIDATES:', productCandidates);
+  const fallbackCandidates = productCandidates.length > 0 ? productCandidates : [cleanedQuery];
+  console.log('PRODUCT CANDIDATES:', fallbackCandidates);
 
   const { data: fallbackRows, error: fallbackError } = await supabase
     .from('documents')
@@ -586,7 +598,7 @@ if (filtered.length === 0) {
   const matchedRows = fallbackRows.filter((row) => {
     const content = normalizeForProductMatch(row.content || '');
 
-    return productCandidates.some((candidate) => {
+    return fallbackCandidates.some((candidate) => {
       const normalizedCandidate = normalizeForProductMatch(candidate);
       if (!normalizedCandidate) return false;
 
