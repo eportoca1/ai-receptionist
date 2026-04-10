@@ -353,16 +353,80 @@ function normalizeRoutingText(value = '') {
     .trim();
 }
 
+function looksLikeShortProductQuery(text = '') {
+  const normalized = normalizeRoutingText(text);
+  if (!normalized) return false;
+
+  const tokens = normalized.split(/\s+/).filter(Boolean);
+  const excludedTokens = new Set([
+    'a',
+    'an',
+    'the',
+    'and',
+    'or',
+    'but',
+    'for',
+    'to',
+    'of',
+    'in',
+    'on',
+    'with',
+    'i',
+    'you',
+    'we',
+    'they',
+    'it',
+    'is',
+    'are',
+    'am',
+    'this',
+    'that',
+    'these',
+    'those',
+    'my',
+    'your',
+    'our',
+    'their',
+    'need',
+    'help',
+    'please',
+    'want',
+    'where',
+    'what',
+    'when',
+    'why',
+    'how',
+    'hi',
+    'hello',
+    'hey',
+    'good',
+    'morning',
+    'afternoon',
+    'evening',
+    'thanks',
+    'thank'
+  ]);
+
+  if (tokens.length === 0 || tokens.length > 4) {
+    return false;
+  }
+
+  return tokens.every((token) => token.length > 1 && !excludedTokens.has(token));
+}
+
 function shouldUseKnowledgeRetrieval(text, supportMode = false) {
   const normalized = normalizeRoutingText(text);
 
   if (!normalized) return false;
+
+  const productCandidates = extractProductCandidates(text);
 
   const supportKeywords = [
     'troubleshoot',
     'troubleshooting',
     'setup',
     'set up',
+    'setting up',
     'manual',
     'instructions',
     'pair',
@@ -431,9 +495,15 @@ function shouldUseKnowledgeRetrieval(text, supportMode = false) {
 
   const hasSupportKeyword = supportKeywords.some((keyword) => normalized.includes(keyword));
   const hasRoutingKeyword = routingKeywords.some((keyword) => normalized.includes(keyword));
+  const hasProductKeyword = normalized.includes('product');
+  const hasLikelyProductMention =
+    looksLikeShortProductQuery(text) ||
+    productCandidates.some((candidate) => looksLikeShortProductQuery(candidate));
 
   if (hasSupportKeyword) return true;
   if (hasRoutingKeyword) return false;
+  if (hasProductKeyword) return true;
+  if (hasLikelyProductMention) return true;
 
   if (supportMode) {
     const shortBackchannels = [
