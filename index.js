@@ -512,9 +512,170 @@ function extractProductCandidates(userText = '') {
     }
   }
 
+  if (candidates.size === 0) {
+    for (const segment of segments) {
+      const looseCandidate = segment
+        .replace(/^(it\s+is|it's|its|this\s+is|this|actually|just)\s+/i, '')
+        .replace(/^(the|a|an)\s+/i, '')
+        .trim();
+
+      const wordCount = looseCandidate.split(/\s+/).filter(Boolean).length;
+      if (looseCandidate && wordCount > 0 && wordCount <= 6) {
+        candidates.add(looseCandidate);
+      }
+    }
+  }
+
   return Array.from(candidates);
 }
 
+
+function scoreProductResolution(candidate = '', productName = '') {
+  const normalizedCandidate = normalizeForProductMatch(candidate);
+  const normalizedProduct = normalizeForProductMatch(productName);
+
+  if (!normalizedCandidate || !normalizedProduct) {
+    return -1;
+  }
+
+  if (normalizedCandidate === normalizedProduct) {
+    return 3000 + normalizedProduct.length;
+  }
+
+  if (normalizedCandidate.includes(normalizedProduct)) {
+    return 2000 + normalizedProduct.length;
+  }
+
+  if (normalizedProduct.includes(normalizedCandidate)) {
+    return 1000 + normalizedCandidate.length;
+  }
+
+  return -1;
+}
+
+async function resolveProductNameForClient(productCandidates = []) {
+  const cleanedCandidates = Array.from(new Set(
+    productCandidates
+      .map((candidate) => String(candidate || '').trim())
+      .filter(Boolean)
+  ));
+
+  if (!cleanedCandidates.length) {
+    return '';
+  }
+
+  const { data, error } = await supabase
+    .from('documents')
+    .select('product_name')
+    .eq('client_id', KNOWLEDGE_CLIENT_ID)
+    .not('product_name', 'is', null)
+    .limit(5000);
+
+  if (error) {
+    throw error;
+  }
+
+  const uniqueProducts = Array.from(
+    new Map(
+      (data || [])
+        .map((row) => String(row.product_name || '').trim())
+        .filter(Boolean)
+        .map((productName) => [normalizeForProductMatch(productName), productName])
+    ).values()
+  );
+
+  let bestMatch = '';
+  let bestScore = -1;
+
+  for (const productName of uniqueProducts) {
+    for (const candidate of cleanedCandidates) {
+      const score = scoreProductResolution(candidate, productName);
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = productName;
+        continue;
+      }
+
+      if (score === bestScore && score >= 0) {
+        const productLength = normalizeForProductMatch(productName).length;
+        const bestLength = normalizeForProductMatch(bestMatch).length;
+
+        if (productLength > bestLength || (productLength === bestLength && productName.localeCompare(bestMatch) < 0)) {
+          bestMatch = productName;
+        }
+      }
+    }
+  }
+
+  return bestScore >= 0 ? bestMatch : '';
+}
+
+function parseStoredEmbedding(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => Number(item))
+      .filter((item) => Number.isFinite(item));
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((item) => Number(item))
+          .filter((item) => Number.isFinite(item));
+      }
+    } catch (_) {
+    }
+
+    return value
+      .replace(/^\[/, '')
+      .replace(/\]$/, '')
+      .split(',')
+      .map((item) => Number(item.trim()))
+      .filter((item) => Number.isFinite(item));
+  }
+
+  return [];
+}
+
+function cosineSimilarity(left = [], right = []) {
+  if (!left.length || !right.length) {
+    return 0;
+  }
+
+  const length = Math.min(left.length, right.length);
+  let dot = 0;
+  let leftMagnitude = 0;
+  let rightMagnitude = 0;
+
+  for (let i = 0; i < length; i++) {
+    const leftValue = Number(left[i] || 0);
+    const rightValue = Number(right[i] || 0);
+    dot += leftValue * rightValue;
+    leftMagnitude += leftValue * leftValue;
+    rightMagnitude += rightValue * rightValue;
+  }
+
+  if (!leftMagnitude || !rightMagnitude) {
+    return 0;
+  }
+
+  return dot / (Math.sqrt(leftMagnitude) * Math.sqrt(rightMagnitude));
+}
+
+function rankKnowledgeRows(rows = [], queryEmbedding = []) {
+  return rows
+    .map((row) => {
+      const storedEmbedding = parseStoredEmbedding(row.embedding);
+      return {
+        ...row,
+        similarity: cosineSimilarity(queryEmbedding, storedEmbedding)
+      };
+    })
+    .sort((left, right) => Number(right.similarity || 0) - Number(left.similarity || 0));
+}
 
 async function createEmbedding(input) {
   const response = await fetch('https://api.openai.com/v1/embeddings', {
@@ -549,13 +710,56 @@ async function getRelevantKnowledge(query) {
   }
 
   const productCandidates = extractProductCandidates(cleanedQuery);
-  const bestProductCandidate =
-    productCandidates.find((candidate) => String(candidate || '').trim()) || '';
-  const retrievalQuery = bestProductCandidate || cleanedQuery;
+  console.log('PRODUCT CANDIDATES:', productCandidates);
 
-  console.log('KNOWLEDGE RETRIEVAL QUERY:', retrievalQuery);
+  const resolvedProduct = productCandidates.length > 0
+    ? await resolveProductNameForClient(productCandidates)
+    : '';
 
-  const queryEmbedding = await createEmbedding(retrievalQuery);
+  console.log('RESOLVED PRODUCT:', resolvedProduct || '[NONE]');
+
+  if (resolvedProduct) {
+    const { data: productRows, error: productError } = await supabase
+      .from('documents')
+      .select('content, embedding')
+      .eq('client_id', KNOWLEDGE_CLIENT_ID)
+      .ilike('product_name', resolvedProduct)
+      .limit(500);
+
+    if (productError) {
+      throw productError;
+    }
+
+    const productMatchCount = productRows?.length || 0;
+    console.log('PRODUCT FILTER MATCH COUNT:', productMatchCount);
+
+    if (productMatchCount === 0) {
+      return '';
+    }
+
+    const queryEmbedding = await createEmbedding(cleanedQuery);
+    if (!queryEmbedding) {
+      return '';
+    }
+
+    const rankedProductRows = rankKnowledgeRows(productRows || [], queryEmbedding);
+    const filteredProductRows = rankedProductRows
+      .filter((item) => Number(item.similarity || 0) >= KNOWLEDGE_SIMILARITY_THRESHOLD)
+      .slice(0, KNOWLEDGE_MAX_SNIPPETS);
+
+    const rowsToReturn = filteredProductRows.length > 0
+      ? filteredProductRows
+      : rankedProductRows.slice(0, KNOWLEDGE_MAX_SNIPPETS);
+
+    return rowsToReturn
+      .map((item) => String(item.content || '').trim())
+      .filter(Boolean)
+      .join('\n\n');
+  }
+
+  console.log('PRODUCT FILTER MATCH COUNT:', 0);
+
+  const queryEmbedding = await createEmbedding(cleanedQuery);
   if (!queryEmbedding) {
     return '';
   }
@@ -574,47 +778,45 @@ async function getRelevantKnowledge(query) {
     .filter((item) => Number(item.similarity || 0) >= KNOWLEDGE_SIMILARITY_THRESHOLD)
     .slice(0, KNOWLEDGE_MAX_SNIPPETS);
 
-if (filtered.length === 0) {
-  console.log('⚠️ No embedding results, trying keyword fallback...');
+  if (filtered.length === 0) {
+    console.log('⚠️ No embedding results, trying keyword fallback...');
 
-  const fallbackCandidates = productCandidates.length > 0 ? productCandidates : [cleanedQuery];
-  console.log('PRODUCT CANDIDATES:', fallbackCandidates);
+    const fallbackCandidates = productCandidates.length > 0 ? productCandidates : [cleanedQuery];
+    const { data: fallbackRows, error: fallbackError } = await supabase
+      .from('documents')
+      .select('content')
+      .eq('client_id', KNOWLEDGE_CLIENT_ID)
+      .limit(300);
 
-  const { data: fallbackRows, error: fallbackError } = await supabase
-    .from('documents')
-    .select('content')
-    .eq('client_id', KNOWLEDGE_CLIENT_ID)
-    .limit(300);
+    if (fallbackError) {
+      console.error('Fallback search error:', fallbackError);
+      return '';
+    }
 
-  if (fallbackError) {
-    console.error('Fallback search error:', fallbackError);
-    return '';
-  }
+    if (!fallbackRows || fallbackRows.length === 0) {
+      return '';
+    }
 
-  if (!fallbackRows || fallbackRows.length === 0) {
-    return '';
-  }
+    const matchedRows = fallbackRows.filter((row) => {
+      const content = normalizeForProductMatch(row.content || '');
 
-  const matchedRows = fallbackRows.filter((row) => {
-    const content = normalizeForProductMatch(row.content || '');
+      return fallbackCandidates.some((candidate) => {
+        const normalizedCandidate = normalizeForProductMatch(candidate);
+        if (!normalizedCandidate) return false;
 
-    return fallbackCandidates.some((candidate) => {
-      const normalizedCandidate = normalizeForProductMatch(candidate);
-      if (!normalizedCandidate) return false;
-
-      return content.includes(normalizedCandidate);
+        return content.includes(normalizedCandidate);
+      });
     });
-  });
 
-  if (matchedRows.length === 0) {
-    return '';
+    if (matchedRows.length === 0) {
+      return '';
+    }
+
+    return matchedRows
+      .slice(0, KNOWLEDGE_MAX_SNIPPETS)
+      .map((item) => item.content)
+      .join('\n\n');
   }
-
-  return matchedRows
-    .slice(0, KNOWLEDGE_MAX_SNIPPETS)
-    .map((item) => item.content)
-    .join('\n\n');
-}
 
   return filtered
     .map((item) => String(item.content || '').trim())

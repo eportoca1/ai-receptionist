@@ -21,6 +21,34 @@ const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 const BUCKET_NAME = 'documents';
 const CLIENT_ID = 'mobilelink';
 
+function toDisplayProductName(value = '') {
+  return String(value || '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => {
+      if (!/[a-z]/i.test(word) || word === word.toUpperCase()) {
+        return word;
+      }
+
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(' ');
+}
+
+function deriveProductNameFromFileName(fileName = '') {
+  const withoutExtension = String(fileName || '').replace(/\.[^.]+$/, '');
+  const normalized = withoutExtension
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const stripped = normalized
+    .replace(/\s*(user\s*manual|usermanual|manual|instruction\s*manual|instructions?|quick\s*start(?:\s*guide)?|setup\s*guide)\s*$/i, '')
+    .trim();
+
+  return toDisplayProductName(stripped || normalized);
+}
+
 function chunkText(text, chunkSize = 1200, overlap = 200) {
   const cleaned = text.replace(/\s+/g, ' ').trim();
   const chunks = [];
@@ -80,12 +108,15 @@ async function extractPdfText(buffer) {
 }
 
 async function saveChunks(fileName, chunks) {
+  const productName = deriveProductNameFromFileName(fileName);
+
   for (let i = 0; i < chunks.length; i++) {
     const content = chunks[i];
     const embedding = await getEmbedding(content);
 
     const { error } = await supabase.from('documents').insert({
       client_id: CLIENT_ID,
+      product_name: productName,
       content: `[SOURCE: ${fileName}] ${content}`,
       embedding,
     });
@@ -94,7 +125,7 @@ async function saveChunks(fileName, chunks) {
       throw error;
     }
 
-    console.log(`Saved chunk ${i + 1}/${chunks.length} for ${fileName}`);
+    console.log(`Saved chunk ${i + 1}/${chunks.length} for ${fileName} (${productName})`);
   }
 }
 
