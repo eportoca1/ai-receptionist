@@ -541,6 +541,132 @@ function normalizeForProductMatch(text = '') {
     .trim();
 }
 
+function normalizeProductAliasText(text = '') {
+  return normalizeForProductMatch(text)
+    .replace(/\bsound\s+bar\b/g, 'soundbar')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const GENERIC_PRODUCT_CANDIDATE_PHRASES = new Set([
+  'tell me everything you know',
+  'tell me what you know',
+  'everything you know',
+  'what do you know',
+  'well'
+]);
+
+const GENERIC_PRODUCT_CANDIDATE_WORDS = new Set([
+  'tell',
+  'me',
+  'everything',
+  'you',
+  'know',
+  'what',
+  'do',
+  'well',
+  'please',
+  'thanks',
+  'thank'
+]);
+
+const PRODUCT_DESCRIPTOR_WORDS = new Set([
+  'soundbar',
+  'speaker',
+  'speakers',
+  'controller',
+  'controllers',
+  'remote',
+  'watch',
+  'headphone',
+  'headphones',
+  'earbud',
+  'earbuds',
+  'earphone',
+  'earphones',
+  'wireless'
+]);
+
+function isLikelyProductCandidate(value = '') {
+  const candidate = String(value || '').trim();
+  const normalized = normalizeProductAliasText(candidate);
+
+  if (!normalized) {
+    return false;
+  }
+
+  if (GENERIC_PRODUCT_CANDIDATE_PHRASES.has(normalized)) {
+    return false;
+  }
+
+  const tokens = normalized.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0 || tokens.length > 6) {
+    return false;
+  }
+
+  const alphaTokens = tokens.filter((token) => /[a-z]/i.test(token));
+  if (!alphaTokens.length) {
+    return false;
+  }
+
+  const nonGenericTokens = alphaTokens.filter((token) => !GENERIC_PRODUCT_CANDIDATE_WORDS.has(token));
+  return nonGenericTokens.length > 0;
+}
+
+function addProductCandidate(candidates, value = '') {
+  const candidate = String(value || '').trim();
+  if (!candidate) {
+    return;
+  }
+
+  if (!isLikelyProductCandidate(candidate)) {
+    console.log('PRODUCT CANDIDATE REJECTED:', candidate);
+    return;
+  }
+
+  candidates.add(candidate);
+}
+
+function addProductAliasVariant(aliases, value = '') {
+  const normalized = normalizeProductAliasText(value);
+  if (!normalized) {
+    return;
+  }
+
+  aliases.add(normalized);
+  aliases.add(normalized.replace(/\s+/g, ''));
+
+  if (normalized.includes('soundbar')) {
+    aliases.add(normalized.replace(/\bsoundbar\b/g, 'sound bar'));
+  }
+}
+
+function buildProductAliases(productName = '') {
+  const canonical = normalizeProductAliasText(productName);
+  if (!canonical) {
+    return [];
+  }
+
+  const aliases = new Set();
+  addProductAliasVariant(aliases, canonical);
+
+  const tokens = canonical.split(/\s+/).filter(Boolean);
+  const withoutNumbers = tokens.filter((token) => !/^\d+$/.test(token));
+  addProductAliasVariant(aliases, withoutNumbers.join(' '));
+
+  const coreTokens = withoutNumbers.filter((token) => !PRODUCT_DESCRIPTOR_WORDS.has(token));
+  const descriptorTokens = withoutNumbers.filter((token) => PRODUCT_DESCRIPTOR_WORDS.has(token));
+
+  addProductAliasVariant(aliases, coreTokens.join(' '));
+  addProductAliasVariant(aliases, [...coreTokens, ...descriptorTokens].join(' '));
+
+  if (coreTokens.length >= 2 && descriptorTokens.length > 0) {
+    addProductAliasVariant(aliases, [coreTokens.join(''), ...descriptorTokens].join(' '));
+  }
+
+  return Array.from(aliases).filter(Boolean);
+}
+
 function extractProductCandidates(userText = '') {
   const original = String(userText || '').trim();
   if (!original) return [];
@@ -575,9 +701,7 @@ function extractProductCandidates(userText = '') {
           .replace(/^(the|a|an)\s+/i, '')
           .trim();
 
-        if (value) {
-          candidates.add(value);
-        }
+        addProductCandidate(candidates, value);
       }
     }
   }
@@ -589,10 +713,7 @@ function extractProductCandidates(userText = '') {
         .replace(/^(the|a|an)\s+/i, '')
         .trim();
 
-      const wordCount = looseCandidate.split(/\s+/).filter(Boolean).length;
-      if (looseCandidate && wordCount > 0 && wordCount <= 6) {
-        candidates.add(looseCandidate);
-      }
+      addProductCandidate(candidates, looseCandidate);
     }
   }
 
@@ -601,26 +722,37 @@ function extractProductCandidates(userText = '') {
 
 
 function scoreProductResolution(candidate = '', productName = '') {
-  const normalizedCandidate = normalizeForProductMatch(candidate);
-  const normalizedProduct = normalizeForProductMatch(productName);
+  const normalizedCandidate = normalizeProductAliasText(candidate);
+  const normalizedProduct = normalizeProductAliasText(productName);
 
   if (!normalizedCandidate || !normalizedProduct) {
-    return -1;
+    return { score: -1, alias: '', matchType: '' };
   }
 
-  if (normalizedCandidate === normalizedProduct) {
-    return 3000 + normalizedProduct.length;
+  const aliases = buildProductAliases(productName);
+  let bestMatch = { score: -1, alias: '', matchType: '' };
+
+  for (const alias of aliases) {
+    let score = -1;
+
+    if (normalizedCandidate === alias) {
+      score = alias === normalizedProduct ? 3000 + alias.length : 2500 + alias.length;
+    } else if (alias.includes(normalizedCandidate)) {
+      score = alias === normalizedProduct ? 2000 + normalizedCandidate.length : 1500 + normalizedCandidate.length;
+    } else if (normalizedCandidate.includes(alias)) {
+      score = alias === normalizedProduct ? 1000 + alias.length : 800 + alias.length;
+    }
+
+    if (score > bestMatch.score) {
+      bestMatch = {
+        score,
+        alias,
+        matchType: alias === normalizedProduct ? 'canonical' : 'alias'
+      };
+    }
   }
 
-  if (normalizedCandidate.includes(normalizedProduct)) {
-    return 2000 + normalizedProduct.length;
-  }
-
-  if (normalizedProduct.includes(normalizedCandidate)) {
-    return 1000 + normalizedCandidate.length;
-  }
-
-  return -1;
+  return bestMatch;
 }
 
 async function resolveProductNameForClient(productCandidates = []) {
@@ -650,32 +782,43 @@ async function resolveProductNameForClient(productCandidates = []) {
       (data || [])
         .map((row) => String(row.product_name || '').trim())
         .filter(Boolean)
-        .map((productName) => [normalizeForProductMatch(productName), productName])
+        .map((productName) => [normalizeProductAliasText(productName), productName])
     ).values()
   );
 
   let bestMatch = '';
   let bestScore = -1;
+  let bestMatchType = '';
+  let bestCandidate = '';
 
   for (const productName of uniqueProducts) {
     for (const candidate of cleanedCandidates) {
-      const score = scoreProductResolution(candidate, productName);
+      const resolution = scoreProductResolution(candidate, productName);
+      const score = resolution.score;
 
       if (score > bestScore) {
         bestScore = score;
         bestMatch = productName;
+        bestMatchType = resolution.matchType;
+        bestCandidate = candidate;
         continue;
       }
 
       if (score === bestScore && score >= 0) {
-        const productLength = normalizeForProductMatch(productName).length;
-        const bestLength = normalizeForProductMatch(bestMatch).length;
+        const productLength = normalizeProductAliasText(productName).length;
+        const bestLength = normalizeProductAliasText(bestMatch).length;
 
         if (productLength > bestLength || (productLength === bestLength && productName.localeCompare(bestMatch) < 0)) {
           bestMatch = productName;
+          bestMatchType = resolution.matchType;
+          bestCandidate = candidate;
         }
       }
     }
+  }
+
+  if (bestScore >= 0 && bestMatchType === 'alias' && bestCandidate) {
+    console.log(`PRODUCT ALIAS MATCH: ${bestCandidate} -> ${bestMatch}`);
   }
 
   return bestScore >= 0 ? bestMatch : '';
