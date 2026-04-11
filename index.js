@@ -769,14 +769,16 @@ async function createEmbedding(input) {
   return data.data?.[0]?.embedding || null;
 }
 
-async function getRelevantKnowledge(query) {
+async function getRelevantKnowledge(query, options = {}) {
+  const { activeProduct = '' } = options;
+
   if (!supabase) {
-    return '';
+    return { knowledge: '', resolvedProduct: '' };
   }
 
   const cleanedQuery = String(query || '').trim();
   if (!cleanedQuery) {
-    return '';
+    return { knowledge: '', resolvedProduct: '' };
   }
 
   const productCandidates = extractProductCandidates(cleanedQuery);
@@ -787,13 +789,18 @@ async function getRelevantKnowledge(query) {
     : '';
 
   console.log('RESOLVED PRODUCT:', resolvedProduct || '[NONE]');
+  const productToUse = resolvedProduct || activeProduct;
 
-  if (resolvedProduct) {
+  if (!resolvedProduct && activeProduct) {
+    console.log('ACTIVE PRODUCT REUSED:', activeProduct);
+  }
+
+  if (productToUse) {
     const { data: productRows, error: productError } = await supabase
       .from('documents')
       .select('content, embedding')
       .eq('client_id', KNOWLEDGE_CLIENT_ID)
-      .ilike('product_name', resolvedProduct)
+      .ilike('product_name', productToUse)
       .limit(500);
 
     if (productError) {
@@ -804,12 +811,12 @@ async function getRelevantKnowledge(query) {
     console.log('PRODUCT FILTER MATCH COUNT:', productMatchCount);
 
     if (productMatchCount === 0) {
-      return '';
+      return { knowledge: '', resolvedProduct: productToUse };
     }
 
     const queryEmbedding = await createEmbedding(cleanedQuery);
     if (!queryEmbedding) {
-      return '';
+      return { knowledge: '', resolvedProduct: productToUse };
     }
 
     const rankedProductRows = rankKnowledgeRows(productRows || [], queryEmbedding);
@@ -821,17 +828,20 @@ async function getRelevantKnowledge(query) {
       ? filteredProductRows
       : rankedProductRows.slice(0, KNOWLEDGE_MAX_SNIPPETS);
 
-    return rowsToReturn
-      .map((item) => String(item.content || '').trim())
-      .filter(Boolean)
-      .join('\n\n');
+    return {
+      knowledge: rowsToReturn
+        .map((item) => String(item.content || '').trim())
+        .filter(Boolean)
+        .join('\n\n'),
+      resolvedProduct: productToUse
+    };
   }
 
   console.log('PRODUCT FILTER MATCH COUNT:', 0);
 
   const queryEmbedding = await createEmbedding(cleanedQuery);
   if (!queryEmbedding) {
-    return '';
+    return { knowledge: '', resolvedProduct: '' };
   }
 
   const { data, error } = await supabase.rpc('match_documents', {
@@ -860,11 +870,11 @@ async function getRelevantKnowledge(query) {
 
     if (fallbackError) {
       console.error('Fallback search error:', fallbackError);
-      return '';
+      return { knowledge: '', resolvedProduct: '' };
     }
 
     if (!fallbackRows || fallbackRows.length === 0) {
-      return '';
+      return { knowledge: '', resolvedProduct: '' };
     }
 
     const matchedRows = fallbackRows.filter((row) => {
@@ -879,19 +889,25 @@ async function getRelevantKnowledge(query) {
     });
 
     if (matchedRows.length === 0) {
-      return '';
+      return { knowledge: '', resolvedProduct: '' };
     }
 
-    return matchedRows
-      .slice(0, KNOWLEDGE_MAX_SNIPPETS)
-      .map((item) => item.content)
-      .join('\n\n');
+    return {
+      knowledge: matchedRows
+        .slice(0, KNOWLEDGE_MAX_SNIPPETS)
+        .map((item) => item.content)
+        .join('\n\n'),
+      resolvedProduct: ''
+    };
   }
 
-  return filtered
-    .map((item) => String(item.content || '').trim())
-    .filter(Boolean)
-    .join('\n\n');
+  return {
+    knowledge: filtered
+      .map((item) => String(item.content || '').trim())
+      .filter(Boolean)
+      .join('\n\n'),
+    resolvedProduct: ''
+  };
 }
 
 const VOICE = 'marin';
@@ -1785,6 +1801,7 @@ fastify.register(async (fastifyInstance) => {
     let markQueue = [];
     let responseStartTimestampTwilio = null;
     let supportRetrievalMode = false;
+    let activeSupportProduct = '';
 
     let callerPhone = 'Unknown';
     let callSid = 'Unknown';
@@ -1821,7 +1838,18 @@ turn_detection: {
 
     const sendResponseForTurn = async (userText, retrieveKnowledge = false) => {
       try {
-        const knowledge = retrieveKnowledge ? await getRelevantKnowledge(userText) : '';
+        const retrievalResult = retrieveKnowledge
+          ? await getRelevantKnowledge(userText, { activeProduct: activeSupportProduct })
+          : { knowledge: '', resolvedProduct: '' };
+
+        const knowledge = retrievalResult.knowledge || '';
+        const resolvedProduct = retrievalResult.resolvedProduct || '';
+
+        if (resolvedProduct && resolvedProduct !== activeSupportProduct) {
+          activeSupportProduct = resolvedProduct;
+          console.log('ACTIVE PRODUCT SET:', activeSupportProduct);
+        }
+
         console.log('==============================');
 console.log('LIVE USER QUERY:', userText);
 console.log('RETRIEVED KNOWLEDGE START');
@@ -2016,6 +2044,7 @@ if (LOG_EVENT_TYPES.includes(response.type)) {
             responseStartTimestampTwilio = null;
             latestMediaTimestamp = 0;
             supportRetrievalMode = false;
+            activeSupportProduct = '';
             break;
 
           case 'mark':
