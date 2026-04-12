@@ -1988,7 +1988,7 @@ fastify.register(async (fastifyInstance) => {
 turn_detection: {
   type: 'server_vad',
   create_response: !manualResponseMode,
-  silence_duration_ms: 800
+  silence_duration_ms: 400
 }
             },
             output: {
