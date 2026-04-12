@@ -25,6 +25,9 @@ const {
   TWILIO_AUTH_TOKEN
 } = process.env;
 
+const WARRANTY_FORM_URL = process.env.WARRANTY_FORM_URL || 'https://electronicworldusa.com/warranty/';
+const TWILIO_SMS_FROM = process.env.TWILIO_SMS_FROM || '';
+
 if (!OPENAI_API_KEY) {
   console.error('Missing OpenAI API key. Please set it in the .env file.');
   process.exit(1);
@@ -225,13 +228,15 @@ If the caller asks about wholesale, becoming a dealer, ordering in bulk, pricing
 
 WARRANTY / RETURNS FLOW:
 If the caller asks about warranty or returns:
-- First do basic troubleshooting BEFORE starting a warranty process.
-- Gather:
-  1) Product name/type (speaker, headphones, etc.)
-  2) What exactly is happening
-  3) When/where they bought it
-  4) Any order number or proof of purchase (if available)
-  5) Best callback number + email
+- If the caller is only asking general warranty information, answer simply.
+- Explain that most products come with a one-year limited warranty.
+- For information-only warranty questions, do NOT automatically offer the warranty form link.
+- If the caller wants to start a warranty claim, return, or service request because something happened to the product:
+  - reassure them briefly
+  - explain that most products come with a one-year limited warranty
+  - offer to text the warranty form to the number they are calling from to get the process started
+  - only send the form after the caller clearly says yes
+- Do NOT require detailed troubleshooting before offering the warranty form.
 - If they're upset, acknowledge emotion + keep calm + offer escalation.
 - Use:"I'll document this and have the appropriate team follow up.”
 
@@ -568,6 +573,100 @@ function looksLikeGeneralQuestion(text = '') {
   ];
 
   return generalIntentPhrases.some((phrase) => normalized.includes(phrase));
+}
+
+function looksLikeWarrantyInfoOnly(text = '') {
+  const normalized = normalizeRoutingText(text);
+  if (!normalized) return false;
+
+  const phrases = [
+    'do your products have a warranty',
+    'do you have a warranty',
+    'how long is the warranty',
+    'what is the warranty',
+    'what does the warranty cover',
+    'tell me about the warranty',
+    'is there a warranty'
+  ];
+
+  return phrases.some((phrase) => normalized.includes(phrase));
+}
+
+function looksLikeWarrantyActionRequest(text = '') {
+  const normalized = normalizeRoutingText(text);
+  if (!normalized) return false;
+
+  const phrases = [
+    'start a warranty claim',
+    'submit a warranty claim',
+    'warranty claim',
+    'warranty request',
+    'my product broke',
+    'broken product',
+    'return this',
+    'start a return',
+    'return request',
+    'need service',
+    'service request',
+    'warranty help'
+  ];
+
+  return phrases.some((phrase) => normalized.includes(phrase));
+}
+
+function looksLikeWarrantySmsConsent(text = '') {
+  const normalized = normalizeRoutingText(text);
+  if (!normalized) return false;
+
+  const exactMatches = new Set([
+    'yes',
+    'yes please',
+    'yeah',
+    'yeah please',
+    'yep',
+    'sure',
+    'sure please',
+    'please do',
+    'go ahead'
+  ]);
+
+  if (exactMatches.has(normalized)) {
+    return true;
+  }
+
+  const phrases = [
+    'send it',
+    'text it',
+    'send that',
+    'text that',
+    'send the form',
+    'text the form',
+    'send me the form',
+    'text me the form',
+    'send me the link',
+    'text me the link',
+    'send it now',
+    'text it now'
+  ];
+
+  return phrases.some((phrase) => normalized.includes(phrase));
+}
+
+function looksLikeAlternateWarrantySmsRequest(text = '') {
+  const normalized = normalizeRoutingText(text);
+  if (!normalized) return false;
+
+  const phrases = [
+    'different number',
+    'another number',
+    'other number',
+    'use a different number',
+    'send it to a different number',
+    'text it to a different number',
+    'not this number'
+  ];
+
+  return phrases.some((phrase) => normalized.includes(phrase));
 }
 
 const GENERIC_PRODUCT_CANDIDATE_PHRASES = new Set([
@@ -1464,6 +1563,63 @@ async function downloadTwilioRecording(recordingUrl) {
   return Buffer.from(arrayBuffer);
 }
 
+function normalizeSmsPhoneNumber(phoneNumber = '') {
+  const raw = String(phoneNumber || '').trim();
+  const digits = raw.replace(/\D/g, '');
+
+  if (!digits) {
+    return '';
+  }
+
+  if (raw.startsWith('+') && digits.length >= 10 && digits.length <= 15) {
+    return `+${digits}`;
+  }
+
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return `+${digits}`;
+  }
+
+  if (digits.length === 10) {
+    return `+1${digits}`;
+  }
+
+  return '';
+}
+
+async function sendWarrantySms(phoneNumber) {
+  if (!TWILIO_SMS_FROM) {
+    throw new Error('Missing TWILIO_SMS_FROM environment variable.');
+  }
+
+  const normalizedTo = normalizeSmsPhoneNumber(phoneNumber);
+  if (!normalizedTo) {
+    throw new Error(`Invalid phone number for warranty SMS: ${phoneNumber}`);
+  }
+
+  const authString = Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString('base64');
+  const smsBody = `Electronic World USA: Here is the link to begin your warranty request: ${WARRANTY_FORM_URL} Please complete the form and our team will follow up with you.`;
+
+  const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${authString}`,
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: new URLSearchParams({
+      To: normalizedTo,
+      From: TWILIO_SMS_FROM,
+      Body: smsBody
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Twilio SMS send failed: ${response.status} ${errorText}`);
+  }
+
+  return normalizedTo;
+}
+
 async function transcribeAudioBuffer(audioBuffer) {
   const form = new FormData();
   form.append('file', new Blob([audioBuffer]), 'call.wav');
@@ -1985,6 +2141,7 @@ fastify.register(async (fastifyInstance) => {
     let responseStartTimestampTwilio = null;
     let supportRetrievalMode = false;
     let activeSupportProduct = '';
+    let warrantySmsOfferPending = false;
 
     let callerPhone = 'Unknown';
     let callSid = 'Unknown';
@@ -2063,6 +2220,29 @@ response: {
     };
 
     const handleCallerTurn = (userText) => {
+      if (warrantySmsOfferPending && looksLikeWarrantySmsConsent(userText)) {
+        if (callerPhone && callerPhone !== 'Unknown') {
+          warrantySmsOfferPending = false;
+
+          void sendWarrantySms(callerPhone)
+            .then((sentTo) => {
+              console.log(`✅ Warranty SMS sent to ${sentTo}`);
+            })
+            .catch((err) => {
+              console.error('❌ Warranty SMS failed:', err);
+            });
+        } else {
+          console.warn('⚠️ Warranty SMS requested but caller phone is unavailable. Ask caller for a preferred cell number.');
+          warrantySmsOfferPending = true;
+        }
+      } else if (warrantySmsOfferPending && looksLikeAlternateWarrantySmsRequest(userText)) {
+        warrantySmsOfferPending = true;
+      } else if (looksLikeWarrantyActionRequest(userText)) {
+        warrantySmsOfferPending = true;
+      } else if (looksLikeWarrantyInfoOnly(userText)) {
+        warrantySmsOfferPending = false;
+      }
+
       const shouldRetrieveForThisTurn = shouldUseKnowledgeRetrieval(userText, supportRetrievalMode);
 
       if (!supportRetrievalMode && shouldRetrieveForThisTurn && openAiWs.readyState === WebSocket.OPEN) {
@@ -2228,6 +2408,7 @@ if (LOG_EVENT_TYPES.includes(response.type)) {
             latestMediaTimestamp = 0;
             supportRetrievalMode = false;
             activeSupportProduct = '';
+            warrantySmsOfferPending = false;
             break;
 
           case 'mark':
