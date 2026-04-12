@@ -543,9 +543,11 @@ function normalizeForProductMatch(text = '') {
 
 function normalizeProductAliasText(text = '') {
   return normalizeForProductMatch(text)
+    .replace(/\bfour\s+in\s+one\b/g, '4in1')
     .replace(/\b(\d+)\s*-\s*in\s*-\s*(\d+)\b/g, '$1in$2')
     .replace(/\b(\d+)\s+in\s+(\d+)\b/g, '$1in$2')
     .replace(/\bair\s*touch\b/g, 'airtouch')
+    .replace(/\bmic\s*flip\b/g, 'micflip')
     .replace(/\bsound\s+bar\b/g, 'soundbar')
     .replace(/\s+/g, ' ')
     .trim();
@@ -554,8 +556,34 @@ function normalizeProductAliasText(text = '') {
 function stripLeadingProductFiller(value = '') {
   return String(value || '')
     .replace(/^(?:can you tell me about your product|tell me about your product|can you tell me about|tell me about|what about)\s+/i, '')
+    .replace(/^(?:one of your products|one of your product|your products|your product)\s+/i, '')
+    .replace(/^(?:i need help with|can you help me with|help me with)\s+(?:one of your products|one of your product|your products|your product)\s*,?\s*/i, '')
     .replace(/^(?:the|a|an)\s+/i, '')
     .trim();
+}
+
+function looksLikeGeneralQuestion(text = '') {
+  const normalized = normalizeRoutingText(text);
+
+  if (!normalized) {
+    return false;
+  }
+
+  const generalIntentPhrases = [
+    'do you have a warranty',
+    'what is your warranty',
+    'what are your hours',
+    'what time do you open',
+    'what time do you close',
+    'it seems like you know all the products',
+    'do you know all the products',
+    'can i speak to someone',
+    'can i speak with someone',
+    'can i talk to someone',
+    'can i talk to a person'
+  ];
+
+  return generalIntentPhrases.some((phrase) => normalized.includes(phrase));
 }
 
 const GENERIC_PRODUCT_CANDIDATE_PHRASES = new Set([
@@ -947,10 +975,18 @@ async function getRelevantKnowledge(query, options = {}) {
     : '';
 
   console.log('RESOLVED PRODUCT:', resolvedProduct || '[NONE]');
-  const productToUse = resolvedProduct || activeProduct;
+  const shouldReuseActiveProduct =
+    !resolvedProduct &&
+    activeProduct &&
+    !looksLikeGeneralQuestion(cleanedQuery);
+  const productToUse = resolvedProduct || (shouldReuseActiveProduct ? activeProduct : '');
 
   if (!resolvedProduct && activeProduct) {
-    console.log('ACTIVE PRODUCT REUSED:', activeProduct);
+    if (shouldReuseActiveProduct) {
+      console.log('ACTIVE PRODUCT REUSED:', activeProduct);
+    } else {
+      console.log('ACTIVE PRODUCT REUSE SKIPPED: GENERAL_INTENT');
+    }
   }
 
   if (productToUse) {
