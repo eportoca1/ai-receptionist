@@ -2122,7 +2122,7 @@ fastify.register(async (fastifyInstance) => {
 turn_detection: {
   type: 'server_vad',
   create_response: !manualResponseMode,
-  silence_duration_ms: 400
+  silence_duration_ms: 600
 }
             },
             output: {
@@ -2166,7 +2166,9 @@ response: {
 }
         };
 
-        openAiWs.send(JSON.stringify(responseCreate));
+        setTimeout(() => {
+          openAiWs.send(JSON.stringify(responseCreate));
+        }, 120);
       } catch (err) {
         console.error('❌ Knowledge retrieval failed. Falling back to base instructions:', err);
 
@@ -2177,7 +2179,9 @@ response: {
 }
         };
 
-        openAiWs.send(JSON.stringify(fallbackResponse));
+        setTimeout(() => {
+          openAiWs.send(JSON.stringify(fallbackResponse));
+        }, 120);
       }
     };
 
