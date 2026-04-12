@@ -7,6 +7,7 @@ import fastifyFormBody from '@fastify/formbody';
 import fastifyWs from '@fastify/websocket';
 import { createClient } from '@supabase/supabase-js';
 import { processConversation } from './conversation/engine.js';
+import { createInitialConversationState } from './conversation/state.js';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -270,12 +271,14 @@ function buildBaseInstructions() {
 function buildResponseInstructions({
   knowledge = '',
   intent = 'general',
-  strategy = 'Be friendly, natural, and helpful.'
+  strategy = 'Be friendly, natural, and helpful.',
+  state = { currentStage: 'general' }
 } = {}) {
   let instructions =
     buildBaseInstructions() +
     '\n\nCURRENT CONTEXT:\n' +
     `- Intent: ${intent}\n` +
+    `- Stage: ${state.currentStage || 'general'}\n` +
     `- Strategy: ${strategy}\n` +
     '\n\nLIVE CALL RULES:\n' +
     '- For normal receptionist, routing, sales, wholesale, complaint, or general company questions, respond normally using the base Electronic World knowledge.\n' +
@@ -2112,6 +2115,7 @@ fastify.register(async (fastifyInstance) => {
     let supportRetrievalMode = false;
     let activeSupportProduct = '';
     let warrantySmsOfferPending = false;
+    let conversationState = createInitialConversationState();
 
     let callerPhone = 'Unknown';
     let callSid = 'Unknown';
@@ -2148,12 +2152,14 @@ turn_detection: {
 
     const sendResponseForTurn = async (userText, retrieveKnowledge = false) => {
       const transcript = userText;
-      const decision = processConversation(transcript);
+      const decision = processConversation(transcript, conversationState);
+      conversationState = decision.state;
 
       console.log('🧠 Conversation Decision:', {
         transcript,
         intent: decision.intent,
-        strategy: decision.strategy
+        strategy: decision.strategy,
+        state: decision.state
       });
 
       try {
@@ -2179,7 +2185,8 @@ console.log(knowledge || '[NO KNOWLEDGE RETURNED]');
         const instructions = buildResponseInstructions({
           knowledge,
           intent: decision.intent,
-          strategy: decision.strategy
+          strategy: decision.strategy,
+          state: decision.state
         });
 
         const responseCreate = {
@@ -2198,7 +2205,8 @@ response: {
         const instructions = buildResponseInstructions({
           knowledge: '',
           intent: decision.intent,
-          strategy: decision.strategy
+          strategy: decision.strategy,
+          state: decision.state
         });
 
         const fallbackResponse = {
@@ -2404,6 +2412,7 @@ if (LOG_EVENT_TYPES.includes(response.type)) {
             supportRetrievalMode = false;
             activeSupportProduct = '';
             warrantySmsOfferPending = false;
+            conversationState = createInitialConversationState();
             break;
 
           case 'mark':
