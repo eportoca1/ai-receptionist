@@ -6,6 +6,7 @@ import fs from 'fs';
 import fastifyFormBody from '@fastify/formbody';
 import fastifyWs from '@fastify/websocket';
 import { createClient } from '@supabase/supabase-js';
+import { processConversation } from './conversation/engine.js';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -266,9 +267,16 @@ function buildBaseInstructions() {
   );
 }
 
-function buildResponseInstructions(knowledgeText = '') {
+function buildResponseInstructions({
+  knowledge = '',
+  intent = 'general',
+  strategy = 'Be friendly, natural, and helpful.'
+} = {}) {
   let instructions =
     buildBaseInstructions() +
+    '\n\nCURRENT CONTEXT:\n' +
+    `- Intent: ${intent}\n` +
+    `- Strategy: ${strategy}\n` +
     '\n\nLIVE CALL RULES:\n' +
     '- For normal receptionist, routing, sales, wholesale, complaint, or general company questions, respond normally using the base Electronic World knowledge.\n' +
     '- Only use manual knowledge when it clearly matches the caller\'s product or troubleshooting issue.\n' +
@@ -278,10 +286,10 @@ function buildResponseInstructions(knowledgeText = '') {
     '- Prefer plain conversational wording over formal or scripted phrasing.\n' +
     '- Do not dump long technical text unless the caller specifically asks for it.';
 
-  if (knowledgeText) {
+  if (knowledge) {
     instructions +=
       '\n\n============================\nLIVE RETRIEVED MANUAL KNOWLEDGE\n============================\n' +
-      knowledgeText;
+      knowledge;
   }
 
   return instructions;
@@ -2139,6 +2147,15 @@ turn_detection: {
     };
 
     const sendResponseForTurn = async (userText, retrieveKnowledge = false) => {
+      const transcript = userText;
+      const decision = processConversation(transcript);
+
+      console.log('🧠 Conversation Decision:', {
+        transcript,
+        intent: decision.intent,
+        strategy: decision.strategy
+      });
+
       try {
         const retrievalResult = retrieveKnowledge
           ? await getRelevantKnowledge(userText, { activeProduct: activeSupportProduct })
@@ -2156,13 +2173,19 @@ turn_detection: {
 console.log('LIVE USER QUERY:', userText);
 console.log('RETRIEVED KNOWLEDGE START');
 console.log(knowledge || '[NO KNOWLEDGE RETURNED]');
-console.log('RETRIEVED KNOWLEDGE END');
-console.log('==============================');
+        console.log('RETRIEVED KNOWLEDGE END');
+        console.log('==============================');
+
+        const instructions = buildResponseInstructions({
+          knowledge,
+          intent: decision.intent,
+          strategy: decision.strategy
+        });
 
         const responseCreate = {
           type: 'response.create',
 response: {
-  instructions: buildResponseInstructions(knowledge)
+  instructions
 }
         };
 
@@ -2172,10 +2195,16 @@ response: {
       } catch (err) {
         console.error('❌ Knowledge retrieval failed. Falling back to base instructions:', err);
 
+        const instructions = buildResponseInstructions({
+          knowledge: '',
+          intent: decision.intent,
+          strategy: decision.strategy
+        });
+
         const fallbackResponse = {
           type: 'response.create',
 response: {
-  instructions: buildResponseInstructions('')
+  instructions
 }
         };
 
