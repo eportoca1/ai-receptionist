@@ -543,6 +543,9 @@ function normalizeForProductMatch(text = '') {
 
 function normalizeProductAliasText(text = '') {
   return normalizeForProductMatch(text)
+    .replace(/\b(\d+)\s*-\s*in\s*-\s*(\d+)\b/g, '$1in$2')
+    .replace(/\b(\d+)\s+in\s+(\d+)\b/g, '$1in$2')
+    .replace(/\bair\s*touch\b/g, 'airtouch')
     .replace(/\bsound\s+bar\b/g, 'soundbar')
     .replace(/\s+/g, ' ')
     .trim();
