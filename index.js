@@ -551,6 +551,13 @@ function normalizeProductAliasText(text = '') {
     .trim();
 }
 
+function stripLeadingProductFiller(value = '') {
+  return String(value || '')
+    .replace(/^(?:can you tell me about your product|tell me about your product|can you tell me about|tell me about|what about)\s+/i, '')
+    .replace(/^(?:the|a|an)\s+/i, '')
+    .trim();
+}
+
 const GENERIC_PRODUCT_CANDIDATE_PHRASES = new Set([
   'tell me everything you know',
   'tell me what you know',
@@ -617,7 +624,7 @@ function isLikelyProductCandidate(value = '') {
 }
 
 function addProductCandidate(candidates, value = '') {
-  const candidate = String(value || '').trim();
+  const candidate = stripLeadingProductFiller(value);
   if (!candidate) {
     return;
   }
@@ -665,6 +672,11 @@ function buildProductAliases(productName = '') {
 
   if (coreTokens.length >= 2 && descriptorTokens.length > 0) {
     addProductAliasVariant(aliases, [coreTokens.join(''), ...descriptorTokens].join(' '));
+  }
+
+  if (canonical === normalizeProductAliasText('Air Touch Pro II Clean')) {
+    addProductAliasVariant(aliases, 'AirTouch Pro 2');
+    addProductAliasVariant(aliases, 'Air Touch Pro 2');
   }
 
   return Array.from(aliases).filter(Boolean);
