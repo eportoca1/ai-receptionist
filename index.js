@@ -353,80 +353,16 @@ function normalizeRoutingText(value = '') {
     .trim();
 }
 
-function looksLikeShortProductQuery(text = '') {
-  const normalized = normalizeRoutingText(text);
-  if (!normalized) return false;
-
-  const tokens = normalized.split(/\s+/).filter(Boolean);
-  const excludedTokens = new Set([
-    'a',
-    'an',
-    'the',
-    'and',
-    'or',
-    'but',
-    'for',
-    'to',
-    'of',
-    'in',
-    'on',
-    'with',
-    'i',
-    'you',
-    'we',
-    'they',
-    'it',
-    'is',
-    'are',
-    'am',
-    'this',
-    'that',
-    'these',
-    'those',
-    'my',
-    'your',
-    'our',
-    'their',
-    'need',
-    'help',
-    'please',
-    'want',
-    'where',
-    'what',
-    'when',
-    'why',
-    'how',
-    'hi',
-    'hello',
-    'hey',
-    'good',
-    'morning',
-    'afternoon',
-    'evening',
-    'thanks',
-    'thank'
-  ]);
-
-  if (tokens.length === 0 || tokens.length > 4) {
-    return false;
-  }
-
-  return tokens.every((token) => token.length > 1 && !excludedTokens.has(token));
-}
-
 function shouldUseKnowledgeRetrieval(text, supportMode = false) {
   const normalized = normalizeRoutingText(text);
 
   if (!normalized) return false;
-
-  const productCandidates = extractProductCandidates(text);
 
   const supportKeywords = [
     'troubleshoot',
     'troubleshooting',
     'setup',
     'set up',
-    'setting up',
     'manual',
     'instructions',
     'pair',
@@ -495,15 +431,9 @@ function shouldUseKnowledgeRetrieval(text, supportMode = false) {
 
   const hasSupportKeyword = supportKeywords.some((keyword) => normalized.includes(keyword));
   const hasRoutingKeyword = routingKeywords.some((keyword) => normalized.includes(keyword));
-  const hasProductKeyword = normalized.includes('product');
-  const hasLikelyProductMention =
-    looksLikeShortProductQuery(text) ||
-    productCandidates.some((candidate) => looksLikeShortProductQuery(candidate));
 
   if (hasSupportKeyword) return true;
   if (hasRoutingKeyword) return false;
-  if (hasProductKeyword) return true;
-  if (hasLikelyProductMention) return true;
 
   if (supportMode) {
     const shortBackchannels = [
@@ -541,8 +471,41 @@ function normalizeForProductMatch(text = '') {
     .trim();
 }
 
+function stripTrailingProductFiller(text = '') {
+  return String(text || '')
+    .replace(/\b(?:everything you know|tell me about it|what do you know|can you tell me)\b\s*$/i, '')
+    .trim();
+}
+
+function cleanProductCandidateText(text = '') {
+  let cleaned = String(text || '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  cleaned = stripTrailingProductFiller(cleaned);
+
+  const leadingPatterns = [
+    /^(?:it\s+is|it's|its|this\s+is|this|actually|just)\s+/i,
+    /^(?:can you tell me about|what can you tell me about|what do you know about|tell me about|can you tell me|tell me)\s+/i,
+    /^(?:about|with)\s+/i
+  ];
+
+  let previous = '';
+  while (cleaned && cleaned !== previous) {
+    previous = cleaned;
+    for (const pattern of leadingPatterns) {
+      cleaned = cleaned.replace(pattern, '').trim();
+    }
+    cleaned = cleaned.replace(/^(the|a|an)\s+/i, '').trim();
+  }
+
+  return cleaned.replace(/[,:;.\-]+$/g, '').trim();
+}
+
 function normalizeProductAliasText(text = '') {
-  return normalizeForProductMatch(text)
+  return normalizeForProductMatch(cleanProductCandidateText(text))
+    .replace(/\b(\d+)\s+in\s+(\d+)\b/g, '$1in$2')
     .replace(/\bsound\s+bar\b/g, 'soundbar')
     .replace(/\s+/g, ' ')
     .trim();
@@ -552,7 +515,9 @@ const GENERIC_PRODUCT_CANDIDATE_PHRASES = new Set([
   'tell me everything you know',
   'tell me what you know',
   'everything you know',
+  'tell me about it',
   'what do you know',
+  'can you tell me',
   'well'
 ]);
 
@@ -564,6 +529,9 @@ const GENERIC_PRODUCT_CANDIDATE_WORDS = new Set([
   'know',
   'what',
   'do',
+  'can',
+  'about',
+  'it',
   'well',
   'please',
   'thanks',
@@ -587,8 +555,14 @@ const PRODUCT_DESCRIPTOR_WORDS = new Set([
   'wireless'
 ]);
 
+const EXPLICIT_PRODUCT_ALIAS_ENTRIES = [
+  { canonical: 'Play Force Controller', aliases: ['PlayForce'] },
+  { canonical: 'Beat Box', aliases: ['Beatbox'] },
+  { canonical: 'Splash Speaker', aliases: ['ElectroSplash'] }
+];
+
 function isLikelyProductCandidate(value = '') {
-  const candidate = String(value || '').trim();
+  const candidate = cleanProductCandidateText(value);
   const normalized = normalizeProductAliasText(candidate);
 
   if (!normalized) {
@@ -614,17 +588,56 @@ function isLikelyProductCandidate(value = '') {
 }
 
 function addProductCandidate(candidates, value = '') {
-  const candidate = String(value || '').trim();
+  const originalCandidate = String(value || '').trim();
+  const candidate = cleanProductCandidateText(originalCandidate);
+
   if (!candidate) {
+    if (originalCandidate) {
+      console.log('PRODUCT CANDIDATE REJECTED:', originalCandidate);
+    }
     return;
   }
 
   if (!isLikelyProductCandidate(candidate)) {
-    console.log('PRODUCT CANDIDATE REJECTED:', candidate);
+    console.log('PRODUCT CANDIDATE REJECTED:', originalCandidate);
     return;
   }
 
   candidates.add(candidate);
+}
+
+function addProductMatchKeys(keys, value = '') {
+  const normalized = normalizeProductAliasText(value);
+  if (!normalized) {
+    return;
+  }
+
+  keys.add(normalized);
+  keys.add(normalized.replace(/\s+/g, ''));
+
+  const expandedNumbers = normalized
+    .replace(/(\d+)in(\d+)/g, '$1 in $2')
+    .replace(/([a-z])(\d)/g, '$1 $2')
+    .replace(/(\d)([a-z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (expandedNumbers) {
+    keys.add(expandedNumbers);
+    keys.add(expandedNumbers.replace(/\s+/g, ''));
+  }
+
+  if (normalized.includes('soundbar')) {
+    const spacedSoundbar = normalized.replace(/\bsoundbar\b/g, 'sound bar');
+    keys.add(spacedSoundbar);
+    keys.add(spacedSoundbar.replace(/\s+/g, ''));
+  }
+}
+
+function buildProductMatchKeys(value = '') {
+  const keys = new Set();
+  addProductMatchKeys(keys, value);
+  return Array.from(keys).filter(Boolean);
 }
 
 function addProductAliasVariant(aliases, value = '') {
@@ -665,6 +678,67 @@ function buildProductAliases(productName = '') {
   }
 
   return Array.from(aliases).filter(Boolean);
+}
+
+function buildExplicitAliasesByCanonical(productNames = []) {
+  const aliasesByCanonical = new Map();
+  const canonicalLookup = new Map(
+    productNames.map((productName) => [normalizeProductAliasText(productName), productName])
+  );
+
+  for (const entry of EXPLICIT_PRODUCT_ALIAS_ENTRIES) {
+    const canonicalProductName = canonicalLookup.get(normalizeProductAliasText(entry.canonical));
+    if (!canonicalProductName) {
+      continue;
+    }
+
+    const aliases = aliasesByCanonical.get(canonicalProductName) || new Set();
+    for (const alias of entry.aliases) {
+      for (const key of buildProductMatchKeys(alias)) {
+        aliases.add(key);
+      }
+    }
+    aliasesByCanonical.set(canonicalProductName, aliases);
+  }
+
+  return aliasesByCanonical;
+}
+
+function buildProductCatalogEntries(productNames = []) {
+  const cleanedProducts = Array.from(
+    new Set(
+      productNames
+        .map((productName) => String(productName || '').trim())
+        .filter(Boolean)
+    )
+  );
+
+  const explicitAliasesByCanonical = buildExplicitAliasesByCanonical(cleanedProducts);
+
+  return cleanedProducts.map((productName) => {
+    const canonicalKeys = new Set(buildProductMatchKeys(productName));
+    const aliasKeys = new Set();
+
+    for (const alias of buildProductAliases(productName)) {
+      for (const key of buildProductMatchKeys(alias)) {
+        aliasKeys.add(key);
+      }
+    }
+
+    for (const key of explicitAliasesByCanonical.get(productName) || []) {
+      aliasKeys.add(key);
+    }
+
+    for (const key of canonicalKeys) {
+      aliasKeys.delete(key);
+    }
+
+    return {
+      productName,
+      canonicalKeys: Array.from(canonicalKeys),
+      aliasKeys: Array.from(aliasKeys)
+    };
+  });
 }
 
 function extractProductCandidates(userText = '') {
@@ -720,37 +794,44 @@ function extractProductCandidates(userText = '') {
   return Array.from(candidates);
 }
 
-
-function scoreProductResolution(candidate = '', productName = '') {
-  const normalizedCandidate = normalizeProductAliasText(candidate);
-  const normalizedProduct = normalizeProductAliasText(productName);
-
-  if (!normalizedCandidate || !normalizedProduct) {
+function scoreProductResolution(candidate = '', catalogEntry = null) {
+  if (!catalogEntry) {
     return { score: -1, alias: '', matchType: '' };
   }
 
-  const aliases = buildProductAliases(productName);
+  const candidateKeys = buildProductMatchKeys(candidate);
+  if (!candidateKeys.length) {
+    return { score: -1, alias: '', matchType: '' };
+  }
+
   let bestMatch = { score: -1, alias: '', matchType: '' };
 
-  for (const alias of aliases) {
-    let score = -1;
+  const considerKeys = (targetKeys, matchType, exactBase, containsBase, reverseContainsBase) => {
+    for (const candidateKey of candidateKeys) {
+      for (const targetKey of targetKeys) {
+        let score = -1;
 
-    if (normalizedCandidate === alias) {
-      score = alias === normalizedProduct ? 3000 + alias.length : 2500 + alias.length;
-    } else if (alias.includes(normalizedCandidate)) {
-      score = alias === normalizedProduct ? 2000 + normalizedCandidate.length : 1500 + normalizedCandidate.length;
-    } else if (normalizedCandidate.includes(alias)) {
-      score = alias === normalizedProduct ? 1000 + alias.length : 800 + alias.length;
-    }
+        if (candidateKey === targetKey) {
+          score = exactBase + targetKey.length;
+        } else if (targetKey.includes(candidateKey)) {
+          score = containsBase + candidateKey.length;
+        } else if (candidateKey.includes(targetKey)) {
+          score = reverseContainsBase + targetKey.length;
+        }
 
-    if (score > bestMatch.score) {
-      bestMatch = {
-        score,
-        alias,
-        matchType: alias === normalizedProduct ? 'canonical' : 'alias'
-      };
+        if (score > bestMatch.score) {
+          bestMatch = {
+            score,
+            alias: targetKey,
+            matchType
+          };
+        }
+      }
     }
-  }
+  };
+
+  considerKeys(catalogEntry.canonicalKeys || [], 'canonical', 4000, 3200, 2800);
+  considerKeys(catalogEntry.aliasKeys || [], 'alias', 3500, 2400, 2000);
 
   return bestMatch;
 }
@@ -758,7 +839,7 @@ function scoreProductResolution(candidate = '', productName = '') {
 async function resolveProductNameForClient(productCandidates = []) {
   const cleanedCandidates = Array.from(new Set(
     productCandidates
-      .map((candidate) => String(candidate || '').trim())
+      .map((candidate) => cleanProductCandidateText(candidate))
       .filter(Boolean)
   ));
 
@@ -786,30 +867,32 @@ async function resolveProductNameForClient(productCandidates = []) {
     ).values()
   );
 
+  const catalogEntries = buildProductCatalogEntries(uniqueProducts);
+
   let bestMatch = '';
   let bestScore = -1;
   let bestMatchType = '';
   let bestCandidate = '';
 
-  for (const productName of uniqueProducts) {
+  for (const catalogEntry of catalogEntries) {
     for (const candidate of cleanedCandidates) {
-      const resolution = scoreProductResolution(candidate, productName);
+      const resolution = scoreProductResolution(candidate, catalogEntry);
       const score = resolution.score;
 
       if (score > bestScore) {
         bestScore = score;
-        bestMatch = productName;
+        bestMatch = catalogEntry.productName;
         bestMatchType = resolution.matchType;
         bestCandidate = candidate;
         continue;
       }
 
       if (score === bestScore && score >= 0) {
-        const productLength = normalizeProductAliasText(productName).length;
+        const productLength = normalizeProductAliasText(catalogEntry.productName).length;
         const bestLength = normalizeProductAliasText(bestMatch).length;
 
-        if (productLength > bestLength || (productLength === bestLength && productName.localeCompare(bestMatch) < 0)) {
-          bestMatch = productName;
+        if (productLength > bestLength || (productLength === bestLength && catalogEntry.productName.localeCompare(bestMatch) < 0)) {
+          bestMatch = catalogEntry.productName;
           bestMatchType = resolution.matchType;
           bestCandidate = candidate;
         }
@@ -824,71 +907,6 @@ async function resolveProductNameForClient(productCandidates = []) {
   return bestScore >= 0 ? bestMatch : '';
 }
 
-function parseStoredEmbedding(value) {
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => Number(item))
-      .filter((item) => Number.isFinite(item));
-  }
-
-  if (typeof value === 'string' && value.trim()) {
-    try {
-      const parsed = JSON.parse(value);
-      if (Array.isArray(parsed)) {
-        return parsed
-          .map((item) => Number(item))
-          .filter((item) => Number.isFinite(item));
-      }
-    } catch (_) {
-    }
-
-    return value
-      .replace(/^\[/, '')
-      .replace(/\]$/, '')
-      .split(',')
-      .map((item) => Number(item.trim()))
-      .filter((item) => Number.isFinite(item));
-  }
-
-  return [];
-}
-
-function cosineSimilarity(left = [], right = []) {
-  if (!left.length || !right.length) {
-    return 0;
-  }
-
-  const length = Math.min(left.length, right.length);
-  let dot = 0;
-  let leftMagnitude = 0;
-  let rightMagnitude = 0;
-
-  for (let i = 0; i < length; i++) {
-    const leftValue = Number(left[i] || 0);
-    const rightValue = Number(right[i] || 0);
-    dot += leftValue * rightValue;
-    leftMagnitude += leftValue * leftValue;
-    rightMagnitude += rightValue * rightValue;
-  }
-
-  if (!leftMagnitude || !rightMagnitude) {
-    return 0;
-  }
-
-  return dot / (Math.sqrt(leftMagnitude) * Math.sqrt(rightMagnitude));
-}
-
-function rankKnowledgeRows(rows = [], queryEmbedding = []) {
-  return rows
-    .map((row) => {
-      const storedEmbedding = parseStoredEmbedding(row.embedding);
-      return {
-        ...row,
-        similarity: cosineSimilarity(queryEmbedding, storedEmbedding)
-      };
-    })
-    .sort((left, right) => Number(right.similarity || 0) - Number(left.similarity || 0));
-}
 
 async function createEmbedding(input) {
   const response = await fetch('https://api.openai.com/v1/embeddings', {
@@ -912,16 +930,14 @@ async function createEmbedding(input) {
   return data.data?.[0]?.embedding || null;
 }
 
-async function getRelevantKnowledge(query, options = {}) {
-  const { activeProduct = '' } = options;
-
+async function getRelevantKnowledge(query) {
   if (!supabase) {
-    return { knowledge: '', resolvedProduct: '' };
+    return '';
   }
 
   const cleanedQuery = String(query || '').trim();
   if (!cleanedQuery) {
-    return { knowledge: '', resolvedProduct: '' };
+    return '';
   }
 
   const productCandidates = extractProductCandidates(cleanedQuery);
@@ -932,18 +948,13 @@ async function getRelevantKnowledge(query, options = {}) {
     : '';
 
   console.log('RESOLVED PRODUCT:', resolvedProduct || '[NONE]');
-  const productToUse = resolvedProduct || activeProduct;
 
-  if (!resolvedProduct && activeProduct) {
-    console.log('ACTIVE PRODUCT REUSED:', activeProduct);
-  }
-
-  if (productToUse) {
+  if (resolvedProduct) {
     const { data: productRows, error: productError } = await supabase
       .from('documents')
       .select('content, embedding')
       .eq('client_id', KNOWLEDGE_CLIENT_ID)
-      .ilike('product_name', productToUse)
+      .ilike('product_name', resolvedProduct)
       .limit(500);
 
     if (productError) {
@@ -953,38 +964,31 @@ async function getRelevantKnowledge(query, options = {}) {
     const productMatchCount = productRows?.length || 0;
     console.log('PRODUCT FILTER MATCH COUNT:', productMatchCount);
 
-    if (productMatchCount === 0) {
-      return { knowledge: '', resolvedProduct: productToUse };
-    }
+    if (productMatchCount > 0) {
+      const queryEmbedding = await createEmbedding(cleanedQuery);
+      if (!queryEmbedding) {
+        return '';
+      }
 
-    const queryEmbedding = await createEmbedding(cleanedQuery);
-    if (!queryEmbedding) {
-      return { knowledge: '', resolvedProduct: productToUse };
-    }
+      const rankedProductRows = rankKnowledgeRows(productRows || [], queryEmbedding);
+      const filteredProductRows = rankedProductRows
+        .filter((item) => Number(item.similarity || 0) >= KNOWLEDGE_SIMILARITY_THRESHOLD)
+        .slice(0, KNOWLEDGE_MAX_SNIPPETS);
 
-    const rankedProductRows = rankKnowledgeRows(productRows || [], queryEmbedding);
-    const filteredProductRows = rankedProductRows
-      .filter((item) => Number(item.similarity || 0) >= KNOWLEDGE_SIMILARITY_THRESHOLD)
-      .slice(0, KNOWLEDGE_MAX_SNIPPETS);
+      const rowsToReturn = filteredProductRows.length > 0
+        ? filteredProductRows
+        : rankedProductRows.slice(0, KNOWLEDGE_MAX_SNIPPETS);
 
-    const rowsToReturn = filteredProductRows.length > 0
-      ? filteredProductRows
-      : rankedProductRows.slice(0, KNOWLEDGE_MAX_SNIPPETS);
-
-    return {
-      knowledge: rowsToReturn
+      return rowsToReturn
         .map((item) => String(item.content || '').trim())
         .filter(Boolean)
-        .join('\n\n'),
-      resolvedProduct: productToUse
-    };
+        .join('\n\n');
+    }
   }
-
-  console.log('PRODUCT FILTER MATCH COUNT:', 0);
 
   const queryEmbedding = await createEmbedding(cleanedQuery);
   if (!queryEmbedding) {
-    return { knowledge: '', resolvedProduct: '' };
+    return '';
   }
 
   const { data, error } = await supabase.rpc('match_documents', {
@@ -1001,56 +1005,51 @@ async function getRelevantKnowledge(query, options = {}) {
     .filter((item) => Number(item.similarity || 0) >= KNOWLEDGE_SIMILARITY_THRESHOLD)
     .slice(0, KNOWLEDGE_MAX_SNIPPETS);
 
-  if (filtered.length === 0) {
-    console.log('⚠️ No embedding results, trying keyword fallback...');
+if (filtered.length === 0) {
+  console.log('⚠️ No embedding results, trying keyword fallback...');
 
-    const fallbackCandidates = productCandidates.length > 0 ? productCandidates : [cleanedQuery];
-    const { data: fallbackRows, error: fallbackError } = await supabase
-      .from('documents')
-      .select('content')
-      .eq('client_id', KNOWLEDGE_CLIENT_ID)
-      .limit(300);
+  const fallbackCandidates = productCandidates.length > 0 ? productCandidates : [cleanedQuery];
 
-    if (fallbackError) {
-      console.error('Fallback search error:', fallbackError);
-      return { knowledge: '', resolvedProduct: '' };
-    }
+  const { data: fallbackRows, error: fallbackError } = await supabase
+    .from('documents')
+    .select('content')
+    .eq('client_id', KNOWLEDGE_CLIENT_ID)
+    .limit(300);
 
-    if (!fallbackRows || fallbackRows.length === 0) {
-      return { knowledge: '', resolvedProduct: '' };
-    }
-
-    const matchedRows = fallbackRows.filter((row) => {
-      const content = normalizeForProductMatch(row.content || '');
-
-      return fallbackCandidates.some((candidate) => {
-        const normalizedCandidate = normalizeForProductMatch(candidate);
-        if (!normalizedCandidate) return false;
-
-        return content.includes(normalizedCandidate);
-      });
-    });
-
-    if (matchedRows.length === 0) {
-      return { knowledge: '', resolvedProduct: '' };
-    }
-
-    return {
-      knowledge: matchedRows
-        .slice(0, KNOWLEDGE_MAX_SNIPPETS)
-        .map((item) => item.content)
-        .join('\n\n'),
-      resolvedProduct: ''
-    };
+  if (fallbackError) {
+    console.error('Fallback search error:', fallbackError);
+    return '';
   }
 
-  return {
-    knowledge: filtered
-      .map((item) => String(item.content || '').trim())
-      .filter(Boolean)
-      .join('\n\n'),
-    resolvedProduct: ''
-  };
+  if (!fallbackRows || fallbackRows.length === 0) {
+    return '';
+  }
+
+  const matchedRows = fallbackRows.filter((row) => {
+    const content = normalizeForProductMatch(row.content || '');
+
+    return fallbackCandidates.some((candidate) => {
+      const normalizedCandidate = normalizeForProductMatch(candidate);
+      if (!normalizedCandidate) return false;
+
+      return content.includes(normalizedCandidate);
+    });
+  });
+
+  if (matchedRows.length === 0) {
+    return '';
+  }
+
+  return matchedRows
+    .slice(0, KNOWLEDGE_MAX_SNIPPETS)
+    .map((item) => item.content)
+    .join('\n\n');
+}
+
+  return filtered
+    .map((item) => String(item.content || '').trim())
+    .filter(Boolean)
+    .join('\n\n');
 }
 
 const VOICE = 'marin';
@@ -1944,7 +1943,8 @@ fastify.register(async (fastifyInstance) => {
     let markQueue = [];
     let responseStartTimestampTwilio = null;
     let supportRetrievalMode = false;
-    let activeSupportProduct = '';
+    let pendingSupportModeActivation = false;
+    let pendingSupportQuery = '';
 
     let callerPhone = 'Unknown';
     let callSid = 'Unknown';
@@ -1981,18 +1981,7 @@ turn_detection: {
 
     const sendResponseForTurn = async (userText, retrieveKnowledge = false) => {
       try {
-        const retrievalResult = retrieveKnowledge
-          ? await getRelevantKnowledge(userText, { activeProduct: activeSupportProduct })
-          : { knowledge: '', resolvedProduct: '' };
-
-        const knowledge = retrievalResult.knowledge || '';
-        const resolvedProduct = retrievalResult.resolvedProduct || '';
-
-        if (resolvedProduct && resolvedProduct !== activeSupportProduct) {
-          activeSupportProduct = resolvedProduct;
-          console.log('ACTIVE PRODUCT SET:', activeSupportProduct);
-        }
-
+        const knowledge = retrieveKnowledge ? await getRelevantKnowledge(userText) : '';
         console.log('==============================');
 console.log('LIVE USER QUERY:', userText);
 console.log('RETRIEVED KNOWLEDGE START');
@@ -2025,14 +2014,13 @@ response: {
     const handleCallerTurn = (userText) => {
       const shouldRetrieveForThisTurn = shouldUseKnowledgeRetrieval(userText, supportRetrievalMode);
 
-      if (!supportRetrievalMode && shouldRetrieveForThisTurn && openAiWs.readyState === WebSocket.OPEN) {
-        supportRetrievalMode = true;
-        console.log('🧠 Support/manual mode activated for this turn on this call.');
-        sendSessionUpdate(true);
-        openAiWs.send(JSON.stringify({ type: 'response.cancel' }));
-        void sendResponseForTurn(userText, true);
-        return;
-      }
+if (!supportRetrievalMode && shouldRetrieveForThisTurn) {
+  pendingSupportModeActivation = true;
+  pendingSupportQuery = userText;
+  console.log('📌 Support/manual mode will activate after the current response finishes.');
+  console.log('📌 Pending support query saved:', pendingSupportQuery);
+  return;
+}
 
       if (supportRetrievalMode && openAiWs.readyState === WebSocket.OPEN) {
         void sendResponseForTurn(userText, shouldRetrieveForThisTurn);
@@ -2107,6 +2095,18 @@ if (LOG_EVENT_TYPES.includes(response.type)) {
     console.log(JSON.stringify(response, null, 2));
   }
 }
+
+supportRetrievalMode = true;
+pendingSupportModeActivation = false;
+console.log('📌 Support/manual mode activated for subsequent turns on this call.');
+
+if (pendingSupportQuery && openAiWs.readyState === WebSocket.OPEN) {
+  console.log('📌 Running retrieval with saved support query:', pendingSupportQuery);
+  void sendResponseForTurn(pendingSupportQuery, true);
+  pendingSupportQuery = '';
+}
+
+sendSessionUpdate(true);
 
         if (response.type === 'response.audio_transcript.done' && response.transcript) {
           const text = String(response.transcript).trim();
@@ -2187,7 +2187,7 @@ if (LOG_EVENT_TYPES.includes(response.type)) {
             responseStartTimestampTwilio = null;
             latestMediaTimestamp = 0;
             supportRetrievalMode = false;
-            activeSupportProduct = '';
+            pendingSupportModeActivation = false;
             break;
 
           case 'mark':
