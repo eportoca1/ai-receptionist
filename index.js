@@ -570,23 +570,37 @@ function looksLikeGeneralQuestion(text = '') {
   }
 
   const generalIntentPhrases = [
+    'warranty',
+    'all these products',
+    'all your products',
+    'do these products',
+    'do all these products',
     'do you have a warranty',
     'what is your warranty',
     'what are your hours',
+    'hours',
     'what time do you open',
     'what time do you close',
     'it seems like you know all the products',
     'do you know all the products',
+    'representative',
+    'customer service',
     'can i speak to someone',
     'can i speak with someone',
     'can i talk to someone',
-    'can i talk to a person'
+    'can i talk to a person',
+    'speak to someone'
   ];
 
   return generalIntentPhrases.some((phrase) => normalized.includes(phrase));
 }
 
 const GENERIC_PRODUCT_CANDIDATE_PHRASES = new Set([
+  'all right thanks',
+  'alright thanks',
+  'okay thanks',
+  'thank you',
+  'thanks',
   'tell me everything you know',
   'tell me what you know',
   'everything you know',
