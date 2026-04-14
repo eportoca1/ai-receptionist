@@ -69,9 +69,9 @@ function buildBookedCallback(reportData) {
     .join(' ')
     .toLowerCase();
 
-  if (!haystack) return null;
+  if (!haystack) return false;
   if (haystack.includes('callback') || haystack.includes('call back')) return true;
-  return null;
+  return false;
 }
 
 function buildRelatedLabel(reportData, callerPhone, callSid) {
