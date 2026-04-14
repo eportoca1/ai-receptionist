@@ -9,6 +9,13 @@ const UNKNOWN_VALUES = new Set([
   'not available'
 ]);
 
+const RECEPTIONIST_STATUSES = {
+  ANSWERED: 'Answered',
+  MISSED: 'Missed',
+  AFTER_HOURS: 'After Hours',
+  ESCALATED: 'Escalated'
+};
+
 function isKnownValue(value) {
   const normalized = String(value ?? '').trim().toLowerCase();
   return !UNKNOWN_VALUES.has(normalized);
@@ -47,6 +54,160 @@ function buildCallReason(reportData) {
     toNullableText(reportData.callContext) ||
     toNullableText(reportData.category)
   );
+}
+
+function normalizeReceptionistStatus(recordingStatus, reportData = {}) {
+  const candidates = [
+    toNullableText(recordingStatus),
+    String(reportData.escalationNeeded || '').trim().toLowerCase() === 'yes'
+      ? RECEPTIONIST_STATUSES.ESCALATED
+      : null,
+    toNullableText(reportData.escalationStatus),
+    toNullableText(reportData.resolutionStatus)
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    const normalized = candidate.toLowerCase();
+
+    if (
+      normalized === 'after hours' ||
+      normalized === 'after-hours' ||
+      normalized.includes('after hours') ||
+      normalized.includes('after-hours')
+    ) {
+      return RECEPTIONIST_STATUSES.AFTER_HOURS;
+    }
+
+    if (normalized === 'escalated' || normalized.includes('escalat')) {
+      return RECEPTIONIST_STATUSES.ESCALATED;
+    }
+
+    if (
+      normalized === 'missed' ||
+      normalized.includes('no answer') ||
+      normalized.includes('busy') ||
+      normalized.includes('failed') ||
+      normalized.includes('cancelled') ||
+      normalized.includes('canceled') ||
+      normalized.includes('abandoned') ||
+      normalized.includes('voicemail')
+    ) {
+      return RECEPTIONIST_STATUSES.MISSED;
+    }
+
+    if (
+      normalized === 'answered' ||
+      normalized === 'completed' ||
+      normalized === 'complete'
+    ) {
+      return RECEPTIONIST_STATUSES.ANSWERED;
+    }
+  }
+
+  return RECEPTIONIST_STATUSES.ANSWERED;
+}
+
+function mapReceptionistReason(value) {
+  const text = toNullableText(value);
+  if (!text) return null;
+
+  const normalized = text.toLowerCase();
+
+  if (
+    normalized.includes('claim status') ||
+    normalized.includes('warranty status') ||
+    normalized.includes('status inquiry') ||
+    (
+      (normalized.includes('status') || normalized.includes('update') || normalized.includes('follow up')) &&
+      (normalized.includes('claim') || normalized.includes('warranty') || normalized.includes('return'))
+    )
+  ) {
+    return 'Warranty Status Check';
+  }
+
+  if (
+    normalized === 'wholesale / dealer inquiry' ||
+    normalized.includes('wholesale') ||
+    normalized.includes('dealer') ||
+    normalized.includes('reseller') ||
+    normalized.includes('distribution') ||
+    normalized.includes('bulk')
+  ) {
+    return 'Wholesale Inquiry';
+  }
+
+  if (
+    normalized === 'warranty / returns' ||
+    normalized.includes('warranty') ||
+    normalized.includes('return authorization') ||
+    normalized.includes('return request') ||
+    normalized.includes('warranty form') ||
+    normalized.includes('return')
+  ) {
+    return 'Warranty Request';
+  }
+
+  if (
+    normalized.includes('representative') ||
+    normalized.includes('real person') ||
+    normalized.includes('human') ||
+    normalized.includes('agent') ||
+    normalized.includes('someone from the team') ||
+    normalized.includes('someone on the team')
+  ) {
+    return 'Representative Request';
+  }
+
+  if (
+    normalized === 'tech support / troubleshooting' ||
+    normalized.includes('troubleshoot') ||
+    normalized.includes('trouble shooting') ||
+    normalized.includes('not working') ||
+    normalized.includes('issue') ||
+    normalized.includes('problem') ||
+    normalized.includes('setup') ||
+    normalized.includes('set up') ||
+    normalized.includes('reset') ||
+    normalized.includes('pair') ||
+    normalized.includes('connect') ||
+    normalized.includes('sync')
+  ) {
+    return 'Troubleshooting';
+  }
+
+  if (
+    normalized.includes('price') ||
+    normalized.includes('pricing') ||
+    normalized.includes('quote') ||
+    normalized.includes('cost')
+  ) {
+    return 'Product Pricing Inquiry';
+  }
+
+  if (
+    normalized === 'general inquiry' ||
+    normalized === 'general question' ||
+    normalized === 'question'
+  ) {
+    return 'General Question';
+  }
+
+  return null;
+}
+
+function normalizeReceptionistReason(reportData = {}) {
+  const candidates = [
+    reportData.issue,
+    reportData.callContext,
+    reportData.category
+  ];
+
+  for (const candidate of candidates) {
+    const normalizedReason = mapReceptionistReason(candidate);
+    if (normalizedReason) return normalizedReason;
+  }
+
+  return buildCallReason(reportData);
 }
 
 function buildCallTags(reportData) {
@@ -172,12 +333,12 @@ export async function writeDashboardCall({
     caller_phone: callerPhone,
     caller_name: toNullableText(reportData.callerName),
     company_name: toNullableText(reportData.businessName),
-    reason: buildCallReason(reportData),
+    reason: normalizeReceptionistReason(reportData),
     handled_by: 'AI Receptionist',
     started_at: toIsoString(startedAtMs),
     ended_at: toIsoString(endedAtMs),
     duration_seconds: normalizedDuration,
-    status: toNullableText(recordingStatus) || 'completed',
+    status: normalizeReceptionistStatus(recordingStatus, reportData),
     summary: toNullableText(reportData.executiveSummary),
     sentiment: toNullableText(reportData.sentiment),
     tags: buildCallTags(reportData),
