@@ -8,6 +8,7 @@ import fastifyWs from '@fastify/websocket';
 import { createClient } from '@supabase/supabase-js';
 import { processConversation } from './conversation/engine.js';
 import { createInitialConversationState } from './conversation/state.js';
+import { writeDashboardCall } from './services/dashboard-writer.js';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -2104,6 +2105,20 @@ ${transcriptLines.join('\n')}
     const htmlBody = buildCallReportHtml(reportData);
     await sendSummaryEmail(subject, plainTextBody, htmlBody);
     console.log('✅ Recording-based summary email sent.');
+
+    try {
+      await writeDashboardCall({
+        supabase,
+        callSid,
+        storedContext,
+        recordingStatus: request.body.RecordingStatus || '',
+        durationSeconds,
+        reportData
+      });
+      console.log('✅ Dashboard call sync completed.');
+    } catch (dashboardError) {
+      console.error('❌ Dashboard call sync failed:', dashboardError);
+    }
 
     callContextStore.delete(callSid);
   } catch (err) {
