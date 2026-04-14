@@ -281,10 +281,10 @@ function shouldCreateOpportunity(reportData) {
   return ['Possible', 'Strong'].includes(String(reportData.leadOpportunity || '').trim());
 }
 
-function buildOpportunityStage(reportData) {
+function normalizeOpportunityStage(reportData = {}) {
   return String(reportData.leadOpportunity || '').trim() === 'Strong'
     ? 'Qualified'
-    : 'New';
+    : 'New Lead';
 }
 
 async function findExistingBySourceCallId(supabase, tableName, sourceCallId) {
@@ -415,7 +415,7 @@ export async function writeDashboardCall({
             toNullableText(reportData.category)
           ),
           estimated_value: null,
-          stage: buildOpportunityStage(reportData),
+          stage: normalizeOpportunityStage(reportData),
           summary: buildSummaryText(reportData.executiveSummary, reportData.outcomeNotes),
           owner: null,
           confidence: null,
